@@ -16,12 +16,26 @@ cuentaDistintos<-function(matriz){
   sapply(Filter(is.numeric, matriz),function(x) length(unique(x)))
 }
 
+stat_box_data <- function(y, upper_limit = max(iris$Sepal.Length) * 1.15) {
+  return( 
+    data.frame(
+      y = 0.95 * upper_limit,
+      label = paste(length(y), '\n')
+    )
+  )
+}
+
 # Diagrama de cajas para las variables cuantitativas y variable objetivo binaria
 boxplot_targetbinaria<-function(var,target,nombreEje){
   dataaux<-data.frame(variable=var,target=target)
   ggplot(dataaux,aes(x=reorder(target, var,FUN = median), y=var))+
     geom_boxplot(aes(fill=target), notch=TRUE) +
-    stat_summary(aes(x=target), fun=mean, geom="point", shape=8) +
+    stat_summary(
+      fun.data = stat_box_data, 
+      geom = "text", 
+      hjust = 0.5,
+      vjust = 2
+    ) +
     ylab(nombreEje)
 }
 
@@ -174,7 +188,7 @@ Transf_Auto<-function(matriz,target){
 # Gr?fico con el V de cramer de todas las variables input para saber su importancia
 graficoVcramer<-function(matriz, target){
   salidaVcramer<-sapply(matriz,function(x) Vcramer(x,target))
-  barplot(sort(salidaVcramer,decreasing =T),las=2,ylim=c(0,1), cex.names = 0.5)
+  barplot(sort(salidaVcramer,decreasing =T),las=2,ylim=c(0,1), cex.names = 0.7)
 }
 
 #Para evaluar el R2 en regr. lineal en cualquier conjunto de datos

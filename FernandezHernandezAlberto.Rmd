@@ -1,0 +1,472 @@
+---
+title: "Minería de Datos y Modelización Predictiva (I)"
+author: "Fernández Hernández Alberto"
+date: "12/28/2020"
+output:
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+\newpage
+```{r, echo=FALSE, include=FALSE}
+source("FuncionesRosa.R")
+library(readxl)
+datos <- read_excel("DatosEleccionesEspaña.xlsx",sheet = 1)
+```
+## 1. Depuración de los datos
+
+Inicialmente nos encontramos ante un conjunto de datos con la información demográfica de los diferentes municipios en España así como sus últimos resultados electorales. Por ello, antes de elegir las variables objetivo y elaborar el modelo de regresión, echemos un primer vistazo a los datos proporcionados. En primer lugar, y antes de analizar las variables independientes, debemos __recategorizar las variables objetivo cualitativas como factor__, dado que el formato establecido por defecto es numérico. Sin contar el campo _CodigoProvincia_ (el cual mencionaremos más adelante) existen un total de 6 variables categóricas, incluyendo las variables objetivo cualitativas (AbstencionAlta, Izquierda y Derecha), además de los campos CCAA, ActividadPpal y Densidad, dado que contienen un número limitado de valores únicos:
+\small
+```{r}
+# c(3, 7, 11, 12, 34, 38) => CCAA, AbstencionAlta, Izquierda, Derecha, ActividadPpal y Densidad
+datos[,c(3, 7, 11, 12, 34, 38)] <- lapply(datos[,c(3, 7, 11, 12, 34, 38)], factor)
+```
+
+Por otro lado, podemos observar que los datos proporcionados contienen un total de 41 variables, de las cuales cabe destacar el campo identificador _Name_, un campo con el nombre de cada municipio:
+\small
+```{r, echo=FALSE}
+cat("Nombres de municipio unicos: ", length(unique(datos$Name)), " de ", nrow(datos), "filas\n")
+```
+
+Salvo excepciones, en las que el nombre del municipio coincide, se trata de un campo que podríamos considerar como identificativo, por lo que no nos aportará información relevante al modelo y por ello lo eliminamos:
+\small
+```{r}
+datos <- datos[, -c(1)] # Eliminamos ademas las variables objetivo que no vayamos a emplear
+```
+
+Por otro lado, nos encontramos con el campo _CodigoProvincia_ que, a diferencia del anterior, el número de valores diferentes es significativamente menor (52 valores únicos). No obstante, nos encontramos ante la siguiente duda ¿Mantenemos los datos en formato numérico o los recategorizamos a _factor_? Por un lado, recategorizarlo como una variable cualitativa puede llegar a entorpecer la elaboración del modelo, en especial si una o varias de las categorías no está lo suficientemente representada y debe ser agrupada. Por otro lado, si queremos mantener la variable como un campo numérico tiene que aportar "sentido" al modelo, esto es, asegurar que la media del código de provincia es de 26.67, por ejemplo, no aporta información, además de que no tiene sentido hablar de media o mediana en este campo. Por otro lado, si quisiéramos emplearlo como un campo más, deberá aportar un cierto grado de importancia, tanto a las variables cuantitativas como cualitativas:
+\small
+```{r}
+# Columnas 5,7,8 y 9 correspondientes con las variables objetivo cuantitativas
+cor(cbind(datos$CodigoProvincia, datos[, c(5,7,8,9)]), use = "complete.obs", method = "pearson")[1,-1]
+# Mediante la V Cramer vemos la importancia sobre las variables objetivo cualitativas
+salida <- c()
+for(col in c("AbstencionAlta", "Izquierda", "Derecha")) {
+  salida <- cbind(salida, sapply(datos[ , "CodigoProvincia"],function(x) Vcramer(x,unlist(datos[, col]))))
+}
+salida
+```
+```{r, echo=FALSE}
+datos <- datos[, -c(1)] # Lo eliminamos
+```
+Como podemos observar en ambas salidas, la correlación tanto en las variables cuantitativas como cualitativas no superan el 0.12 y 0.23 respectivamente, valores bastante bajos, por lo que podemos descartar la variables para ambos modelos. Antes de continuar, de cara a valorar la calidad de la depuración final guardamos en una variable los valores de correlación originales, con el objetivo de compararlos con los del conjunto de datos ya depurado:
+
+```{r}
+corr.previa <- cor(datos[,unlist(lapply(datos, is.numeric))], use="complete.obs", method="pearson")
+```
+
+### 1.1 Valores erróneos / no declarados
+A continuación, procedemos a eliminar aquellos valores no declarados en las variables, así como posible valores fuera de rango:
+
+1. _ForeignersPtge_ negativos. Porcentajes de extranjeros menores a cero:
+\small
+```{r, echo=FALSE}
+summary(datos$ForeignersPtge)
+```
+```{r}
+datos$ForeignersPtge<-replace(datos$ForeignersPtge, which(datos$ForeignersPtge < 0), NA)  # Min < 0
+```
+
+2. Porcentajes de _SameComAutonPtge_ y _PobChange_pct_ superiores al 100 % (en el caso de _PobChange_pct_ según la documentación es posible la aparición de porcentajes negativos, pero no superiores al 100 %):
+\small
+```{r, echo=FALSE}
+summary(datos$SameComAutonPtge)
+```
+```{r}
+datos$SameComAutonPtge <-replace(datos$SameComAutonPtge, which(datos$SameComAutonPtge > 100), NA)
+```
+```{r, echo=FALSE}
+summary(datos$PobChange_pct)
+```
+```{r}
+datos$PobChange_pct <-replace(datos$PobChange_pct, which(datos$PobChange_pct > 100), NA) # Max > 100
+```
+\normalsize
+
+3. Valores a 99999 en la columna _Explotaciones_, posible indicativo de la ausencia de valores en estos casos:
+\small
+```{r, echo=FALSE}
+summary(datos$Explotaciones)
+```
+\normalsize
+\small
+```{r}
+datos$Explotaciones<-replace(datos$Explotaciones,which(datos$Explotaciones==99999),NA) # Max == 99999
+```
+\normalsize
+4. Categoría "?" sin declarar en _Densidad_, por lo que lo recategorizamos a _NA_:
+\small
+```{r, echo=FALSE}
+t(freq(datos$Densidad)) # Nos encontramos con una categoria desconocida "?"
+```
+\normalsize
+\small
+```{r}
+datos$Densidad<-recode.na(datos$Densidad,"?")
+```
+\normalsize
+
+### 1.2 Análisis de valores atípicos
+Una vez corregidos los errores detectados, analicemos los valores atípicos más destacados empleando la función _describe_:
+\small
+```{r, echo=FALSE}
+describe(datos[c("Population", "TotalCensus", "totalEmpresas", "ComercTTEHosteleria", 
+                 "Servicios", "inmuebles", "Pob2010", "SUPERFICIE")])[, c(4, 11, 12)]
+```
+\normalsize
+
+Como podemos observar en la salida anterior, las columnas con la población, el censo total, el número total de empresas, así como la superficie son los que mayor desviación presentan con respecto a su media, lo que se traduce además de un coeficiente de simetría mayor a 1 (asimetría) y una elevada curtosis, claros indicios de la presencia de valores atípicos (algo lógico si nos planteamos el caso de la Población, con municipios que no superan el millar de habitantes en contraste con grandes municipios como Madrid o Barcelona). Por ello, comenzamos analizando el porcentaje maximo de valores atipicos en nuestro conjunto de datos:
+\small
+```{r, echo=FALSE}
+original <- sapply(Filter(is.numeric, datos),function(x) atipicosAmissing(x)[[2]]) * 100/nrow(datos)
+original[which(original == max(original))]
+```
+\normalsize
+En este caso, el maximo porcentaje corresponde con el campo _Servicios_, con un 11.87 %, una de las variables con elevada desviación típica que habíamos planteado previamente. Por ello, dado que el máximo porcentaje de valores atípicos no supera el 12 % podemos marcalos como ausentes sin problema alguno para posteriormente imputarlos.
+\small
+```{r, echo=FALSE}
+datos[,(which(sapply(datos, class)=="numeric")[-6])]<-sapply(datos[, c(which(sapply(datos, class)=="numeric")[-6])],function(x) atipicosAmissing(x)[[1]])
+```
+\normalsize
+### 1.3 Análisis de valores missings (NA). Imputaciones
+Tras recodificar los valores atípicos como ausentes, debemos analizar la proporción de valores atípicos tanto por observacion como por variable. Para ello, obtenemos el valor maximo de atípicos tanto por fila como por columna:
+\small
+```{r, echo=FALSE}
+datos$prop_missings<-apply(is.na(datos[, c(-4,-5,-6,-7,-8,-9,-10)]),1,mean) * 100
+prop_missingsVars<-max(apply(is.na(datos[, c(-4,-5,-6,-7,-8,-9,-10)]),2,mean) * 100)
+data.frame("Por observacion" = max(datos$prop_missings), "Por variable" = prop_missingsVars)
+```
+\normalsize
+Aparentemente, mientras que el porcentaje de _missings_ por variable es del 12.64 %, por observaciones detectamos un mayor numero (37.5 %). No obstante, si empleamos la función _summary_:
+\small
+```{r, echo=FALSE}
+summary(datos$prop_missings)
+```
+\normalsize
+Vemos que el 75 % de las observaciones contienen aproximadamente un 3 % de valores _missings_ o menos, por lo que no parece tratarse de un elevado número de filas. Por otro lado, la pérdida de información en ambos casos no supera el 50 %, por lo que en lugar de eliminar dichos valores podemos imputarlos. De forma previa a la imputación, existen determinados campos que pueden ser imputados sin necesidad de emplear una media, mediana o de forma aleatoria: 
+
+1. _Age_19_65_pct_, cuyo porcentaje de edad puede calcularse a partir de la suma de _Age_under19_Ptge_ y _Age_over65_pct_:
+
+```
+x["Age_19_65_pct"] <- 100 - (as.numeric(x["Age_under19_Ptge"]) + as.numeric(x["Age_over65_pct"]))
+```
+
+2. _totalEmpresas_, cuyo porcentaje puede obtenerse a partir de la suma de _Industria_, _Construccion_, _ComercTTEHosteleria_ y _Servicios_:
+
+```
+x["totalEmpresas"] <- as.numeric(x["Industria"]) + as.numeric(x["Construccion"]) + 
+                      as.numeric(x["ComercTTEHosteleria"]) + as.numeric(x["Servicios"])
+```
+
+3. _Densidad_, cuyo valor puede obtenerse a través del cociente entre _Population_ y _SUPERFICIE_: si la proporcion es menor o igual a 1 decimos que la densidad es "MuyBaja"; si está entre 1 y 5 decimos que es "Baja" y si es mayor o igual a 5 diremos que es "Alta"
+```
+ifelse(proporcion < 1, densidad <- "MuyBaja", ifelse(proporcion > 1 & proporcion < 5, 
+      densidad <- "Baja", densidad <- "Alta"))
+```
+
+Para el proceso de imputación en el resto de variables se ha dividido en un total de dos fases por el siguiente motivo: hay demasiados valores _missing_ consecutivos. Esto supone que, a la hora de realizar la imputación con valores aleatorios (mediante una interpolación) muchos de los valores _missing_ quedan sin imputarse, dado que muchos de ellos parecen ser consecutivos, lo que impide calcular su valor. Para ello, se realiza una primera imputación de forma aleatoria para, a continuación, imputar los valores restantes mediante la mediana (dado que muchos de los valores atípicos marcados a _missing_ presentaban una elevada desviación típica, lo que hace que la mediana sea mucho más representativa que la media):
+\small
+```{r, echo=FALSE}
+columnas <- c(2,3,15,16,17,18,19,20,23,24,25,28,29,30,31,33,34,35,37,38,39)
+cat(sum(is.na(datos)), " valores atipicos\n")
+datos[,columnas] <- sapply(datos[, columnas],function(x) ImputacionCuant(x,"aleatorio"))
+```
+\small
+```
+datos[,columnas] <- sapply(datos[, columnas],function(x) ImputacionCuant(x,"aleatorio"))
+```
+\normalsize
+```{r, echo=FALSE}
+cat(sum(is.na(datos)), " valores atipicos tras la imputacion aleatoria\n")
+datos[,columnas] <- sapply(datos[, columnas],function(x) ImputacionCuant(x,"mediana"))
+```
+\normalsize
+\small
+```
+datos[,columnas] <- sapply(datos[, columnas],function(x) ImputacionCuant(x,"mediana"))
+```
+\normalsize
+\small
+```{r, echo=FALSE}
+cat(sum(is.na(datos)), " valores atipicos tras la imputacion con la mediana\n")
+```
+\normalsize
+Como podemos observar, hemos conseguido reducir el porcentaje de _missings_. A continuación, si imputamos las tres columnas mencionadas anteriormente a partir del resto de variables:
+\small
+```{r, echo=FALSE}
+edad.19.65 <- apply(datos,1,function(x) if(is.na(x["Age_19_65_pct"])) x["Age_19_65_pct"] <- 100 - (as.numeric(x["Age_under19_Ptge"]) + as.numeric(x["Age_over65_pct"])))
+datos[is.na(datos$Age_19_65_pct), "Age_19_65_pct"] <- unlist(edad.19.65[!sapply(edad.19.65, is.null)])
+
+total.empresas <- apply(datos,1,function(x) if(is.na(x["totalEmpresas"])) x["totalEmpresas"] <- as.numeric(x["Industria"]) + as.numeric(x["Construccion"]) + 
+                          as.numeric(x["ComercTTEHosteleria"]) + as.numeric(x["Servicios"]))
+datos[is.na(datos$totalEmpresas), "totalEmpresas"] <- unlist(total.empresas[!sapply(total.empresas, is.null)])
+
+modificar.columna <- function(fila) {
+  densidad <- ""
+  if(is.na(fila["Densidad"])) {
+    proporcion <- as.numeric(fila["Population"]) / as.numeric(fila["SUPERFICIE"])
+    ifelse(proporcion < 1, densidad <- "MuyBaja", ifelse(proporcion > 1 & proporcion < 5, densidad <- "Baja", densidad <- "Alta"))
+  }
+  else {
+    densidad <- fila["Densidad"]
+  }
+  as.factor(densidad)
+}
+datos$Densidad <- apply(datos, 1, modificar.columna)
+cat(sum(is.na(datos)), " valores atipicos\n")
+```
+\normalsize
+Tras la imputación final, veamos qué porcentaje de correlación se ha perdido comparando la correlación del conjunto de datos inicial con respecto al conjunto de datos depurado:
+\small
+```{r}
+corr.posterior <- cor(datos[,unlist(lapply(datos, is.numeric))], use = "complete.obs" , method="pearson")
+comparacion.corr <- corr.posterior[-33, -33] - corr.previa # Eliminamos el campo prop_missings
+sum(abs(comparacion.corr) < 0.2) * 100 / (dim(comparacion.corr)[1] * dim(comparacion.corr)[2])
+```
+\normalsize
+Podemos observar que aproximadamente un 82.55 % de las variables se ha visto reducida en menos de 0.2 con respecto a la correlación original, bastante mayor con respecto a una imputación únicamente con la media o con la mediana. Tras eliminar los valores _missing_ debemos preguntarnos ¿Qué variables escojo como variables objetivo? Para ello, se ha empleado como criterio __aquella variable objetivo__ con mayor suma de correlaciones con respecto al resto de variables:
+\small
+```{r, echo=FALSE}
+for(variableObj in c(4,6,7,8)) {
+  cat(colnames(datos[variableObj]), ". Suma correlaciones: ", sum(abs(cor(datos[,unlist(lapply(datos, is.numeric))], use="complete.obs", method="pearson"))[variableObj, c(-6:-12)]), "\n")
+}
+# Del mismo modo, como variable objetivo cualitativa escogemos el campo Derecha, pues es el que mayor correlacion presenta
+for(variableObj in c(5, 9, 10)) {
+  cat(colnames(datos[variableObj]), ". Suma correlaciones: ", sum(abs(cor(datos[,unlist(lapply(datos, is.numeric))], use="complete.obs", method="pearson"))[variableObj, c(-6:-12)]), "\n")
+}
+```
+\normalsize
+Comenzando con las variables cuantitativas, en un principio elegiríamos como variable objetivo _Otros_Pct_, de no ser por un inconveniente: el elevado número de valores atípicos que presenta, lo que puede llegar a dificultar la elaboración del modelo:
+\small
+```{r}
+sapply(Filter(is.numeric, datos[, c(4:8)]),function(x) atipicosAmissing(x)[[2]]) * 100/nrow(datos)
+```
+\normalsize
+Por ello, y con el objetivo de facilitar el desarrollo de un modelo lineal elegimos el porcentaje de votos a la derecha o _Dcha_Pct_, el cual también presenta un porcentaje de correlación elevado con respecto al resto de variables. En relación a la variable binaria, dada la elevada correlación acumulada que presenta, elegimos como variable objetivo binaria el campo _Derecha_. El resto de variables objetivo son eliminadas.
+\small
+```{r, echo=FALSE, include=FALSE}
+varObjCont <- datos$Dcha_Pct
+varObjBin <- datos$Derecha
+datos <- datos[, -c(4,5,6,7,8,9,10)]
+input_cont <- datos;  input_bin <- datos;
+```
+\normalsize
+Tras eliminar el resto de variables, debemos hacernos la siguiente pregunta. De las variables cualitativas ¿Podemos agrupar alguna de sus categorías? Salvo el campo _Densidad_, donde la frecuencia de cada categoría está repartida de forma equitativa:
+\small
+```{r, echo=FALSE}
+t(freq(datos$Densidad))
+```
+\normalsize
+Tanto en el campo _CCAA_ como _ActividadPpal_ debemos agrupar algunas de las categorías. Comenzando con las Comunidades Autónomas, dado que disponemos de 19 valores diferentes (algunos de los cuales como Ceuta o Melilla con una única representación), tal y como se muestra a continuación:
+
+```{r, echo=FALSE, fig.height=5, fig.width=10}
+boxplot_targetbinaria(varObjCont,input_cont$CCAA,"CCAA")
+```
+
+Para agrupar las Comunidades Autónomas, no solo agruparemos aquellas categorías con un menor número de variables sino además aquellas Comunidades __cuya amplitud en el diagrama de caja y bigotes sea similar__: __País Vasco y Cataluña__, __Navarra y Andalucía__, __ComValenciana, Extremadura, Asturias, Baleares y Canarias__, __Aragón y Castilla la Mancha__, así como __Galicia, Cantabria, Madrid, La Rioja, Ceuta, Melilla y Murcia'__. En el caso de Castilla y León, dado que se trata de la CCAA con mayor número de observaciones, no la agruparemos con otra comunidad. No obstante, de cara a la creación de los modelos es importante tener en cuenta que se trata de la CCAA con la mayor distribución de votos hacia la derecha, además de ser la única categoría que no ha sido agrupada, por lo que lo consideraremos como la __categoría de referencia__, recodificando su nombre a _AA_CL_ (de esta manera la categoría será elegida como referencia por orden alfabético).
+
+En contraposición, nos encontramos con el campo _ActividadPpal_:
+\small
+```{r, echo=FALSE}
+t(freq(datos$ActividadPpal))
+```
+\normalsize
+\small
+```{r, echo=FALSE}
+datos$CCAA <- recode(datos$CCAA, "c('Navarra', 'Andalucía') = 'AN_NA';
+c('ComValenciana', 'Extremadura', 'Asturias', 'Baleares', 'Canarias') = 'CV_EX_AS_BA_CA'; 
+c('Aragón', 'CastillaMancha') = 'AR_CM'; c('CastillaLeón') = 'AA_CL';
+c('Galicia', 'Cantabria', 'Madrid', 'Rioja', 'Ceuta', 'Melilla', 'Murcia') = 'MA_CA_RI_CE_ME_MU_GA'; c('Cataluña', 'PaísVasco') = 'CAT_PV'")
+```
+\normalsize
+En este campo, nos encontramos con los campo _Construccion_ e _Industria_ con apenas 14 y 13 apariciones, respectivamente. Por ello, dado que solo hay que agrupar dos categorías con poca representación (a diferencia de las CCAA donde teníamos 19), lo agruparemos con _Servicios_, la siguiente categoría con menor número de apariciones:
+\small
+```{r}
+datos$ActividadPpal <- recode(datos$ActividadPpal, 
+                      "c('Construccion', 'Industria', 'Otro') = 'Construccion_Industria_Otro';")
+```
+\normalsize
+### 1.4 Transformaciones de variables y relaciones con las variables objetivo
+Una vez recategoriazadas las variables, puede ser necesario realizar alguna transformación en las variables para poder plasmar de este modo la verdadera relación de las variables independientes con la variable objetivo:
+\small
+```{r}
+input_cont<-data.frame(varObjCont,datos,Transf_Auto(Filter(is.numeric, datos),varObjCont))
+input_bin<-data.frame(varObjBin,datos,Transf_Auto(Filter(is.numeric, datos),varObjBin))
+```
+\normalsize
+Sin embargo, debemos recordar un detalle fundamental: __cuantas más variables empleemos para elaborar nuestros modelos, más costoso (computacionalmente) será obtenerlo__. Por tanto, de todas las transformaciones que hemos obtenido ¿Algunas de ellas mejoran la correlación con las variables objetivo? Comenzando con la variable objetivo continua, __compararemos las dos matrices de correlación: las variables originales y sus transformadas__. Sobre la diferencia filtraremos aquellas cuya diferencia sea igual o inferior a 0.01 (prácticamente idénticas):
+\small
+```{r}
+correlaciones  <- round(cor(Filter(is.numeric, input_cont), use="pairwise", method="pearson")[1,32:61] 
+                        - cor(Filter(is.numeric, input_cont), use="pairwise", method="pearson")[1,2:31], 2)
+# Filtramos aquellas variables transformadas que apenas hayan aumentado su correlacion
+colnames(input_cont)[colnames(input_cont) %in% names(correlaciones[correlaciones > -0.01])]
+```
+\normalsize
+Como podemos observar, 10 de las transformadas no aportan apenas mejoría al modelo. Por tanto eliminamos dichas transformadas, junto con aquellas variables originales que aportan menor correlación con respecto a sus transformadas.
+
+Con respecto a la variable objetivo binaria, emplearemos el criterio del __Valor de la información__ o _Information Value_, criterio que nos permite medir la capacidad predictiva que presenta una variable (agrupada en intervalos) para predecir con precisión los valores 1,0 de la variable objetivo. El objetivo será calcular la diferencia entre el _Information Value_ de cada una de las variables originales (agrupadas por intervalos) con respecto a las variables transformadas:
+\small
+```{r, echo=FALSE, include=FALSE}
+library(scorecard)
+```
+\normalsize
+\small
+```{r,results='hide'}
+salida.woe <- woebin(input_bin, "varObjBin", print_step = 0)
+```
+\normalsize
+\small
+```{r}
+summary(sapply(salida.woe[c(2:24,26:28,30:33)], function(x) x$total_iv[1]) - 
+          sapply(salida.woe[c(34:63)], function(x) x$total_iv[1]))
+```
+\normalsize
+Si nos fijamos en la salida anterior, prácticamente ninguna de las variables transformadas mejora significativamente con respecto a la variable original, donde en el mejor de los casos el aporte máximo al valor de información es de 0.015. Por otro lado, el tercer cuartil nos indica que el 75 % de las variables ve mejorado su valor de información en 0.0025 o menos, por lo que apenas supone una mejoría. Por tanto, para el modelo de regresión logístico __mantendremos las variables origiales__ (eliminamos las transformadas).
+\small
+```{r, echo=FALSE}
+input_cont <- input_cont[, !colnames(input_cont) %in% names(correlaciones[correlaciones > -0.01])]
+input_cont <- input_cont[, c(-3,-4,-5,-10,-13,-14,-15,-16,-17:-25,-27,-28,-31)]
+
+input_bin <- input_bin[, -c(35:64)]
+```
+\normalsize
+### 1.5 Detección de las relaciones entre las variables input y objetivo
+Como último paso en el proceso de depuración, debemos analizar qué relación existen entre las variables independientes y objetivo, pero incluso algo mucho más importante ¿Hay correlación entre las variables independientes? Esto último debe tenerse en cuenta, dado que una alta colinealidad puede reducir significativamente la calidad de ambos modelos. Para ello, quisiera destacar cuatro casos en los que se produce colinealidad:
+
+```{r, echo=FALSE}
+par(mfrow = c(1,2))
+corrplot(cor(Filter(is.numeric, input_cont[c(3,4,5,17,7,19,15,16,27:33)]), use="pairwise", method="pearson"), method = "circle",type = "upper", tl.cex = 0.7)
+corrplot(cor(Filter(is.numeric, input_bin[c(5:8,11,13,3,4,21:25,27:28)]), use="pairwise", method="pearson"), method = "circle",type = "upper", tl.cex = 0.7)
+```
+
+Tanto en las variables originales como incluso con aquellas transformadas, nos encontramos con grupos de variables que presentan una elevada correlación entre sí: __los grupos de edad__ (entre 0 y 4 años, menor a 19, entre 19 y 65 y más de 65 años); __si residen o no en la misma CCAA__ ( _SameComAutomPtge_ y _DifComAutonPtge_ ); el total de empresas con respecto al número de empresas de cada sector (Industria, Construcción, Comercio, Servicios, así como el número de inmuebles y la población en el año 2010); e incluso una elevada correlación entre el campo _Population_ y _totalCensus_. Para solventar el problema, empleando la __V de Cramer__ escojemos aquellas variables de cada grupo que tenga una mayor relevancia con respecto a la variable objetivo, mientras que el resto las eliminamos:
+
+```{r, echo=FALSE}
+par(mfrow = c(1,2))
+# Para la varObjCont tiene mayor importancia Age_under19_Ptge, Age_19_65_pct, SameComAutonPtge y logxtotalEmpresas
+graficoVcramer(input_cont[,c(3,4,5,17,7,19,15,16,27:33)],varObjCont)
+# Para la varObjBin tiene mayor importancia Age_over65_pct, SameComAutonPtge y totalEmpresas
+graficoVcramer(input_bin[,c(5:8,11,13,3,4,21:25,27:28)],varObjBin)
+```
+
+Como podemos observar en los gráfico anteriores, para el modelo lineal _input_cont_ nos quedaremos con las variables _Age_under_19_Ptge_ y _Age_19_65_pct_ (no están muy correlacionadas entre sí), _SameComAutonPtge_, _logxPopulation_ y _logxtotalEmpresas_. Con respecto a _input_bin_, conservaremos  _Age_over65_pct_, _SameComAutonPtge_, _Population_ y _totalEmpresas_.
+```{r, echo=FALSE}
+rm(list = ls())
+load("/Users/alberto/UCM/Mineria de Datos y Modelizacion Predictiva/Practica 1/regresion_lineal.RData")
+```
+# 2. Construcción del modelo de regresion lineal
+
+Una vez realizada la depuración de los datos, procedemos a elaborar el modelo de regresión lineal. En primera instancia, __ejecutaremos un primer modelo con todas las variables y todas sus transformaciones__, con el objetivo de echar un primer vistazo al modelo inicial (aunque no sea el definitivo):
+\small
+```{r}
+formInt<-formulaInteracciones(input_cont,1)
+modelo1<-lm(formInt,data=data_train)
+# Funcion que devuelve los valores Train,Test,AIC y SBC
+mostrar.estadisticas(modelo1, data_train, data_test, "lm", "varObjCont")
+```
+\normalsize
+Inicialmente, con 234 variables nos encontramos con un modelo con valores de AIC y BIC bastante elevados, aunque con una diferencia entre el train y test de solo 0.02. Esto supone, en primer lugar, que no todas variables presentan la misma importancia en el modelo (incluso puede que muchas de ellas no aporten prácticamente información). Para comprobarlo, analizaremos las estadísticas de cada variable empleando la función _modelEffectSizes_:
+\small
+```{r}
+variacion.r2 <- modelEffectSizes(modelo1, Print = FALSE)
+summary(variacion.r2$Effects[, 4])
+```
+\normalsize
+Analizando la salida anterior, podemos comprobar que el 75 % de las variables del modelo inicial presentan una importancia en el R2 de 0.0003 o menos, es decir, existe solo un 25 % de las variables que aportan más de 0.0003, por lo que debemos centrarnos en estas últimas (de cara a facilitar la selección clásica). Por ello, elegimos del modelo original aquellas variables atípicas (aportan más de 0.0003 al R2):
+\small
+```{r}
+variables.mas.imp <- names(boxplot(variacion.r2$Effects[, 4], plot = FALSE)$out)
+variables.mas.imp
+```
+\normalsize
+Muchas de las variables con mayor importancia corresponden con interacciones con el campo CCAA. Por tanto, de cara a un segundo modelo conservaremos las transformaciones más importantes junto con las columnas originales, dado que algunas de las variables pueden proporcionar más información al modelo si no están incluidas en ninguna interacción:
+\small
+```{r}
+formInt <- paste0("varObjCont~",paste0(colnames(input_cont[-1]), collapse = "+"),"+",
+                  paste0(variables.mas.imp, collapse = "+"))
+modelo1.2<-lm(as.formula(formInt),data=data_train)
+mostrar.estadisticas(modelo1.2, data_train, data_test, "lm", "varObjCont")
+```
+\normalsize
+Reduciendo el número de parámetros a 60, pese a aumentar el AIC es más de 100 puntos, el criterio SBC consigue verse reducido en más de 1000 puntos, además de recortar la diferencia entre el R2 obtenido en los datos de entrenamiento y _test_. Con la formula del segundo modelo, podemos partir como base para la selección de variables clásica:
+\small
+```
+estadisticas.modelos <- seleccion.clasica(formInt, data_train, data_test, "lm")
+```
+
+```{r, echo=FALSE}
+data.frame("R^2.train" = sapply(estadisticas.modelos, function(x) Rsq(x, "varObjCont", data_train)), 
+           "R^2.test" = sapply(estadisticas.modelos, function(x) Rsq(x, "varObjCont", data_test)), 
+           "Diferencia" = sapply(estadisticas.modelos, function(x) Rsq(x, "varObjCont", data_train) - Rsq(x, "varObjCont", data_test)),
+           "AIC" = sapply(estadisticas.modelos, function(x) AIC(x)), "SBC" = sapply(estadisticas.modelos, function(x) BIC(x)),
+           "N.Parametros" = sapply(estadisticas.modelos, function(x) length(coef(x))))
+```
+\normalsize
+Una vez calculada la selección clásica, realizamos la validación cruzada:
+
+![Validación cruzada en el modelo de selección clásica](validacion_cruzada.png)
+\small
+```{r}
+estadisticas.modelos.final # Mostramos la media y desviacion tipica obtenida en la validacion cruzada
+```
+\normalsize
+Analizando los resultados obtenidos en la selección aleatoria y en la validacion cruzada, los mejores modelos obtenidos han sido el número 2 y el número 6 en términos de desviación de típica (0.01379937 y 0.01331826, respectivamente). No obstante, pese a que la diferencia entre el R2 de entrenamiento y prueba sea ligeramente mayor en el modelo 6 (0.002), los valores tanto de AIC como SBC son menores en comparación con el modelo 2. De hecho, si lo comparamos con el criterio AIC original obtenido en el modelo 1.2 (48908), en el modelo 6 solo se ve aumentado en tan solo 77 puntos, en comparación con los más de 100 que supondría emplear el modelo número 2. Bien es cierto que la anchura de la caja es mayor en el sexto modelo, aunque (dada la escala del gráfico) por una diferencia de apenas décimas o incluso centésimas.
+
+Una vez escogido el modelo 6, realizamos una selección de variables aleatoria, comparando los resultados con el modelo anterior:
+\small
+```{r, echo=FALSE}
+for (x in rownames(modelos.aleatorios)) { mostrar.estadisticas(lm(paste0('varObjCont~', x), data_train), data_train, data_test, "lm", "varObjCont") }
+estadisticas.modelos.final.2
+```
+\normalsize
+![Validación cruzada en el modelo de selección aleatoria + modelo 6](validacion_cruzada_aleatorio.png)
+
+Nuevamente, tanto los valores de AIC como BIC en los modelos aleatorios son mayores con respecto al modelo 6 (incluso el criterio SBC que penalizaba especialmente el número de parámetros). Por otro lado, las desviaciones típicas obtenidas (aunque por una diferencia de tan solo unas centésimas) son superiores a las del modelo 6. __En conclusión, aunque el principio de parsimonia nos lleve a elegir segundo modelo aleatorio (Modelo 3 en el diagrama anterior), pues presenta el mejor resultado de todos los modelos aleatorios ademas de proporcionar la explicación más sencilla al problema, el modelo 6 obtenido en la selección clásica refleja un mejor resultado en todos los sentidos, tanto en AIC, SBC como en desviación típica__. Por tanto, __elegimos como ganador al modelo 6__. A continuación, evaluamos su resultado:
+```{r, echo=FALSE}
+formula.final <-  'varObjCont ~ CCAA + Age_19_65_pct + SameComAutonPtge + 
+    prop_missings + logxForeignersPtge + logxIndustryUnemploymentPtge + 
+    logxServicesUnemploymentPtge + logxtotalEmpresas + CCAA:SameComAutonPtge + 
+    CCAA:logxForeignersPtge'
+modelo.final <- lm(as.formula(formula.final), data = data_train)
+```
+\small
+```{r}
+# Evaluamos las estadisticas del modelo ganador
+mostrar.estadisticas(modelo.final, data_train, data_test, "lm", "varObjCont")
+```
+\normalsize
+\small
+```{r, echo=FALSE}
+# Mostramos sus coeficientes
+summary(modelo.final)
+```
+\normalsize
+
+A modo de ejemplo, interpretamos los coeficientes de dos variables incluidas en el modelo:
+
+1. __CCAAAN_NA__ (Andalucía y Navarra): 9.77. Es decir, __el porcentaje de votos a la derecha aumenta en un 9.77 % si la Comunidad Autónoma a la que pertenece el municipio es Andalucía o Navarra, con respecto a la CCAA de referencia (Castilla y León)__.
+
+2. __logxServicesUnemploymentPtge__: -0.35. Es decir, __por cada incremento unitario en el porcentaje de votos a la Derecha, el porcentaje de parados en el sector Servicios (en escala logarítimica) se ve reducido en -0.35 unidades__
+
+En última instancia, realizamos un análisis de la importancia de las variables del modelo final:
+
+\small
+```{r, echo=FALSE}
+modelEffectSizes(modelo.final)
+```
+\normalsize
+
+En este caso, nos encontramos con dos variables que apenas aportan valor al R2: __logxForeignersPtge__ y __prop_missings__. No obstante, la eliminación de alguna de ellas no aporta mejoría al modelo. En el caso de __logxForeignersPtge__, al eliminarlo supondría que el efecto del porcentaje de extranjeros sobre el porcentaje de votos a la derecha dependiense únicamente de las interacciones de dicha variable con las CCAA. Sin embargo, la interacción entre Castilla y León (la cual se empleaba previamente como categoría de referencia), tampoco aporta información al modelo. Por otro lado, aunque el campo __prop_missings__ suponga una pérdida de tan solo el 0.006 en el R2, al eliminarlo tanto el valor de AIC como SBC aumentan con respecto al modelo anterior:
+\small
+```
+# AIC anterior: 48965.62 ---- SBC anterior: 49128.32
+Train:  0.724361 ; Test:  0.7213045 ; Dif. (Train-Test):  0.003056495 ; AIC: 48977.96 ; SBC:  49133.87 
+Numero de variables:  22 
+```
+\normalsize
+Además, el p-valor obtenido en el _summary_ asegura la importancia de la variable al 95 % de confianza, por lo que tampoco la eliminamos.

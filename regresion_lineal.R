@@ -34,10 +34,10 @@ mostrar.estadisticas(modelo1, data_train, data_test, "lm", "varObjCont")
 # MODELO 1.2
 # No obstante, aun podemos mejorar el modelo. Seguimos teniendo demasiadas variables
 variacion.r2 <- modelEffectSizes(modelo1)
-summary(variacion.r2$Effects[, 4]) # El 75 % de las variables suponen una importancia de 0.0003632 en el R2 o menos
-variables.mas.imp <- rownames(variacion.r2$Effects[variacion.r2$Effects[, 4] > 0.0003632, ])[c(-1)] # Nos quedamos con el 25 % restante
+summary(variacion.r2$Effects[, 4]) # El 75 % de las variables suponen una importancia de 0.0003239 en el R2 o menos
+variables.mas.imp <- names(boxplot(variacion.r2$Effects[, 4], plot = FALSE)$out)# rownames(variacion.r2$Effects[variacion.r2$Effects[, 4] > 0.0003239, ])[c(-1)] # Nos quedamos con el 25 % restante
 
-formInt <- paste0("varObjCont~",paste0(variables.mas.imp, collapse = "+"))
+formInt <- paste0("varObjCont~",paste0(colnames(input_cont[-1]), collapse = "+"),"+",paste0(variables.mas.imp, collapse = "+"))
 modelo1.2<-lm(as.formula(formInt),data=data_train)
 # Mejora el R^2 test, aunque baja ligeramente R^2 train (lo cual reduce la diferencia entre ambos R^2)
 # El numero de variables tambien se ve reducido, pasando de 224 a 93 parametros
@@ -99,7 +99,7 @@ validacion.cruzada <- function(modelos, metodo, data_train) {
 # De cara a la comparacion final, nos quedamos con el sexto modelo, por varios motivos: en primer lugar, aunque no sean el
 # modelo con menos parametros presenta una diferencia baja entre los valores obtenidos entre los datos de entrenamiento y prueba. Ademas, si
 # lo comparamos con los modelos 2 y 4 presenta un AIC y SBC mas bajo, ademas de una desviacion tipica menor en su R2 (mejor bonda media). 
-# Dado que son 38 parametros, en caso de resultar ser el modelo ganador podemos eliminar aquellas variables con menor significancia
+# Dado que son 44 parametros, en caso de resultar ser el modelo ganador podemos eliminar aquellas variables con menor significancia
 estadisticas.modelos.final <- validacion.cruzada(c(estadisticas.modelos), "lm", data_train)
 estadisticas.modelos.final
 
@@ -135,17 +135,12 @@ estadisticas.modelos.final.2
 # Modelo ganador: como modelo de regresion lineal elegimos el sexto modelo obtenido en la seleccion clasica, no solo por los menores valores de AIC y SBC
 # obtenidos en este modelo, sino que ademas la desviacion estandar en los valores de R2 es mas pequena
 
-#  MODELO FINAL ¿Podemos mejorarlo? Usamos la funcion modelEffectSizes para eliminar aquellas variables que no aportan informacion relevante al modelo
-formula.final <-  'varObjCont ~ SameComAutonPtge + SameComAutonDiffProvPtge +
-    CCAA:Age_19_65_pct + CCAA:SameComAutonPtge + 
-    CCAA:SameComAutonDiffProvPtge + CCAA:logxServicesUnemploymentPtge + 
-    Age_under19_Ptge:ActividadPpal + SameComAutonPtge:ActividadPpal'
+#  MODELO FINAL
+formula.final <-  'varObjCont ~ CCAA + Age_19_65_pct + SameComAutonPtge + logxForeignersPtge + logxIndustryUnemploymentPtge + 
+    logxServicesUnemploymentPtge + logxtotalEmpresas + CCAA:SameComAutonPtge + 
+    CCAA:logxForeignersPtge'
 
 modelo.final <- lm(as.formula(formula.final), data = data_train)
-
-# ¿Y si eliminamos CCAA, logxForeignersPtge y logxForeignersPtge:ActividadPpal?
-efectos.modelo.regresion <- modelEffectSizes(modelo.final, Print = FALSE)$Effects[modelEffectSizes(modelo.final, Print = FALSE)$Effect[, 4] < 0.001, ]
-efectos.modelo.regresion[-1, ] # Eliminamos la fila a NA
 
 # Se reduce la desviacion tipica (de 0.01342411 a 0.0133745), aunque el valor medio de R2 disminuye ligeramente (de 0.7248011 a 0.7234081)
 # Evaluacion del modelo ganador

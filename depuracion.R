@@ -4,18 +4,24 @@ library(readxl)
 datos <- read_excel("DatosEleccionesEspaña.xlsx",sheet = 1)
 
 # ---------------------------- FASE 1: DEPURACION DE LOS DATOS ------------------------------
-# 1. El campo "Name" es un campo unicamente Identificativo, por lo que debemos descartarlo
+# 1. No todas las variables categoricas estan como factores (CCAA, AbstencionAlta, Izquierda, Derecha, ActividadPpal, densidad)
+datos[,c(3, 7, 11, 12, 34, 38)] <- lapply(datos[,c(3, 7, 11, 12, 34, 38)], factor)
+
+# 2. El campo "Name" es un campo unicamente Identificativo, por lo que debemos descartarlo
 cat(length(unique(datos$Name)), " de ", nrow(datos), "filas\n")
 datos <- datos[, -c(1)] # Eliminamos ademas las variables objetivo que no vayamos a emplear
-
-# 2. No todas las variables categoricas estan como factores (CCAA, AbstencionAlta, Izquierda, Derecha, ActividadPpal, densidad)
-datos[,c(2,6,10,11,33,37)] <- lapply(datos[,c(2,6,10,11,33,37)], factor)
 
 # ¿Y CodigoProvincia? Problema: toma 52 valores diferentes, por lo que codificarlo como factor puede llegar a "entorpecer" la elaboracion del modelo,
 # especialmente con demasiadas categorias. ¿Y si lo tratamos como una variable cuantitativa? Hay que tener mucho cuidado, ya que el hecho de utilizar el codigo de provincia
 # como una variable numerica mas "tiene que aportar un sentido" al modelo, es decir, que la media del codigoProvincia sea 26.67 no me aporta nada, ademas de que no tiene sentido
-cor(cbind(datos$CodigoProvincia, datos[, c(5,7,8,9)]), use = "complete.obs", method = "pearson")[1,] # Ya solo con las variables cuantitativas no me esta aportando correlacion mayor 0.12
-sapply(as.data.frame(as.factor(datos$CodigoProvincia)),function(x) Vcramer(x,datos$Derecha)) # Nos avisa de que la aproximacion de la Chi-Cuadrado puede ser incorrecta
+# Columnas 5,7,8 y 9 correspondientes con las variables objetivo cuantitativas
+cor(cbind(datos$CodigoProvincia, datos[, c(5,7,8,9)]), use = "complete.obs", method = "pearson")[1,-1]
+# Mediante la V Cramer vemos la importancia sobre las variables objetivo cualitativas
+salida <- c()
+for(col in c("AbstencionAlta", "Izquierda", "Derecha")) {
+  salida <- cbind(salida, sapply(datos[ , "CodigoProvincia"],function(x) Vcramer(x,unlist(datos[, col]))))
+}
+salida
 datos <- datos[, -c(1)] # Lo eliminamos
 
 # Mediante la variable corr.previa nos guardamos la matriz de correlaciones de cara a validar la calidad de la imputacion
@@ -33,18 +39,19 @@ datos$PobChange_pct <-replace(datos$PobChange_pct, which(datos$PobChange_pct > 1
 datos$Explotaciones<-replace(datos$Explotaciones,which(datos$Explotaciones==99999),NA)
 
 # 5. Missings no declarados variables cualitativas
-sapply(Filter(is.factor, datos),function(x) length(unique(x))) # Comprobamos como "Densidad" tiene 4 valores diferentes, cuando deberian ser 3
+t(freq(datos$Densidad)) # Nos encontramos con una categoria desconocida "?"
 datos$Densidad<-recode.na(datos$Densidad,"?")
 
-# 7. Variables con elevada asimetria/kurtosis (Population, TotalCensus, totalEmpresas, ComercTTEHosteleria, Servicios, inmuebles, Pob2010)
-describe(datos[c("Population", "TotalCensus", "totalEmpresas", "ComercTTEHosteleria", "Servicios", "inmuebles", "Pob2010")])
+# 7. Variables con elevada asimetria/kurtosis (Population, TotalCensus, totalEmpresas, ComercTTEHosteleria, Servicios, inmuebles, Pob2010 y SUPERFICIE)
+describe(datos[c("Population", "TotalCensus", "totalEmpresas", "ComercTTEHosteleria", 
+                 "Servicios", "inmuebles", "Pob2010", "SUPERFICIE")])[, c(4, 11, 12)]
 # Como podemos comprobar, la asimetria en las variables anteriores se debe, principalmente, a la grandes ciudades (Madrid, Barcelona) donde hay una mayor poblacion,
 # un mayor numero de empresas y, por ello, mayor numero de inmuebles y actividades
 
 # 8. Valores Atipicos
 # En primer lugar, contamos el porcentaje de valores atipicos de cada variable. Si son muchos, los eliminamos
 original <- sapply(Filter(is.numeric, datos),function(x) atipicosAmissing(x)[[2]]) * 100/nrow(datos)
-max(original)
+original[which(original == max(original))]
 # Modifico los atipicos como missings (el maximo porcentaje es de un 11.87 % en el campo Servicios)
 # Nota: Otros_Pct, al ser una variable objetivo, no vamos a modificar su valores atipicos
 datos[,(which(sapply(datos, class)=="numeric")[-6])]<-sapply(datos[, c(which(sapply(datos, class)=="numeric")[-6])],function(x) atipicosAmissing(x)[[1]])
@@ -61,16 +68,13 @@ mostrar_correlacion_na <- function() {
 
 # A continuacion, obtenemos la proporcion de missings por variable y observacion
 # Por observacion: creamos un nuevo campo
-datos$prop_missings<-apply(is.na(datos),1,mean) * 100
+datos$prop_missings<-apply(is.na(datos[, c(-4,-5,-6,-7,-8,-9,-10)]),1,mean) * 100
 max(datos$prop_missings)
-# Max = 30.769 -> Tengo alguna observacion con un 30.769 % de los datos a missing
-mostrar_boxplot <- function() {
-  return(boxplot(datos$prop_missings))
-}
-cat(length(mostrar_boxplot()$out), "\n") 
+# Max = 37.5 % -> Tengo alguna observacion con un 37.5 % de los datos a missing
+
 # Por variable, obtenemos la media
 # La columna con el mayor porcentaje de missings es del 12.64 %
-(prop_missingsVars<-max(apply(is.na(datos),2,mean) * 100))
+(prop_missingsVars<-max(apply(is.na(datos[, c(-4,-5,-6,-7,-8,-9,-10)]),2,mean) * 100))
 # En ambos casos no superan el 50 % (por lo que no los eliminamos)
 
 # ¿Como imputamos los valores?
@@ -78,7 +82,7 @@ cat(length(mostrar_boxplot()$out), "\n")
 # a un elevado numero de missings consecutivos, no es posible imputar todos los valores, por lo que muchos de ellos quedan sin valor. Una opcion seria, en caso de que la mediana
 # no varie demasiado con respecto al valor original, podemos imputar los valores aleatorios (todos los posibles) y los valores restantes imputarlos con la mediana, dado que es mas
 # representativa que la media
-columnas <- c(2,3,15,16,17,18,19,20,23,24,25,28,29,30,31,33,34,35,37,39)
+columnas <- c(2,3,15,16,17,18,19,20,23,24,25,28,29,30,31,33,34,35,37,38,39)
 antes.imputar <- sapply(Filter(is.numeric, datos[, columnas]), function(x) median(x, na.rm = TRUE))
 datos[,columnas] <- sapply(datos[, columnas],function(x) ImputacionCuant(x,"aleatorio"))
 datos[,columnas] <- sapply(datos[, columnas],function(x) ImputacionCuant(x,"mediana"))
@@ -92,10 +96,6 @@ datos[is.na(datos$Age_19_65_pct), "Age_19_65_pct"] <- unlist(edad.19.65[!sapply(
 total.empresas <- apply(datos,1,function(x) if(is.na(x["totalEmpresas"])) x["totalEmpresas"] <- as.numeric(x["Industria"]) + as.numeric(x["Construccion"]) + 
                           as.numeric(x["ComercTTEHosteleria"]) + as.numeric(x["Servicios"]))
 datos[is.na(datos$totalEmpresas), "totalEmpresas"] <- unlist(total.empresas[!sapply(total.empresas, is.null)])
-
-# PersonasInmueble: se puede calcular a partir del cociente entre el campo Population y el campo inmueble
-personas.inmueble <- apply(datos,1,function(x) if(is.na(x["PersonasInmueble"])) x["PersonasInmueble"] <- round(as.numeric(x["Population"]) / as.numeric(x["inmuebles"]), 2))
-datos[is.na(datos$PersonasInmueble), "PersonasInmueble"] <- unlist(personas.inmueble[!sapply(personas.inmueble, is.null)])
 
 # Por otro lado, no se ha realizado la misma imputacion con Unemployless25_Ptge y PersonasInmueble, dado que al recuperar el porcentaje de valores atipicos
 # aumentaba significativamente, por lo que se ha decidido imputar dichos valores de forma aleatoria junto con la mediana
@@ -139,52 +139,48 @@ for(variableObj in c(5, 9, 10)) {
 varObjCont <- datos$Dcha_Pct
 varObjBin <- datos$Derecha
 datos <- datos[, -c(4,5,6,7,8,9,10)]
-input_cont <- datos;  input_bin <- datos;
 
 # 10. ¿Podemos agrupar categorias de variables cualitativas?
 # Comenzamos con CCAA. Para la varObjCont las agrupamos por similutud en los boxplots
-boxplot_targetbinaria(varObjCont,input_cont$CCAA,"CCAA")
-input_cont$CCAA <- recode(input_cont$CCAA, "c('Navarra', 'Andalucía') = 'AN_NA';
-                                  c('ComValenciana', 'Extremadura', 'Asturias', 'Baleares', 'Canarias') = 'CV_EX_AS_BA_CA'; c('Aragón', 'CastillaMancha') = 'AR_CM'; c('CastillaLeón') = 'AA_CL';
-                                  c('Galicia', 'Cantabria', 'Madrid', 'Rioja', 'Ceuta', 'Melilla', 'Murcia') = 'MA_CA_RI_CE_ME_MU_GA_CM'; c('Cataluña', 'PaísVasco') = 'CAT_PV'")
-# En el caso de la varObjBin, las agrupamos por criterio WOE obtenido mediante la funcion woebin
-library(scorecard)
-woebin(data.frame("varObjBin" = varObjBin, "CCAA" = datos[, c("CCAA")]), "varObjBin")$CCAA[, 2]
-input_bin$CCAA <- recode(input_bin$CCAA, "c('Navarra', 'Andalucía') = 'AN_NA';
-                                  c('ComValenciana', 'Extremadura', 'Asturias', 'Baleares', 'Canarias') = 'CV_EX_AS_BA_CA'; c('Aragón', 'CastillaMancha') = 'AR_CM'; c('CastillaLeón') = 'AA_CL';
-                                  c('Galicia', 'Cantabria', 'Madrid', 'Rioja', 'Ceuta', 'Melilla', 'Murcia') = 'MA_CA_RI_CE_ME_MU_GA_CM'; c('Cataluña', 'PaísVasco') = 'CAT_PV'")
+boxplot_targetbinaria(varObjCont,datos$CCAA,"CCAA")
+datos$CCAA <- recode(datos$CCAA, "c('Navarra', 'Andalucía') = 'AN_NA';
+                                  c('ComValenciana', 'Extremadura', 'Asturias', 'Baleares', 'Canarias') = 'CV_EX_AS_BA_CA'; c('Aragón', 'CastillaMancha') = 'AA_AR_CM';
+                                  c('Galicia', 'Cantabria', 'Madrid', 'Rioja', 'Ceuta', 'Melilla', 'Murcia') = 'MA_CA_RI_CE_ME_MU_GA'; c('Cataluña', 'PaísVasco') = 'CAT_PV'")
 
 # Construccion-Industria-Otro
 # Para este caso nos basamos en el grafico de mosaico. Vemos que aquellos municipios dedicados a la Construccion, Industria u Otros presentan una mayor tendencia de voto a la derecha
 boxplot_targetbinaria(varObjCont,datos$ActividadPpal,"Actividad Principal")
-input_cont$ActividadPpal <- recode(input_cont$ActividadPpal, "c('Construccion', 'Industria', 'Otro') = 'Construccion_Industria_Otro';")
-input_bin$ActividadPpal <- recode(input_bin$ActividadPpal, "c('Construccion', 'Industria', 'Otro') = 'Construccion_Industria_Otro';")
+datos$ActividadPpal <- recode(datos$ActividadPpal, "c('Construccion', 'Industria', 'Otro') = 'Construccion_Industria_Otro';")
 
 # Busco las mejores transformaciones para las variables numericas con respesto a los dos tipos de variables
-input_cont<-data.frame(varObjCont,input_cont,Transf_Auto(Filter(is.numeric, input_cont),varObjCont))
-input_bin<-data.frame(varObjBin,input_bin,Transf_Auto(Filter(is.numeric, input_bin),varObjBin))
+input_cont<-data.frame(varObjCont,datos,Transf_Auto(Filter(is.numeric, datos),varObjCont))
+input_bin<-data.frame(varObjBin,datos,Transf_Auto(Filter(is.numeric, datos),varObjBin))
 
 correlaciones  <- round(cor(Filter(is.numeric, input_cont), use="pairwise", method="pearson")[1,32:61] - cor(Filter(is.numeric, input_cont), use="pairwise", method="pearson")[1,2:31], 2)
 input_cont <- input_cont[, !colnames(input_cont) %in% names(correlaciones[correlaciones > -0.01])]
-input_cont <- input_cont[, c(-3,-4,-5,-10,-13,-14,-15,-16,-17:-25,-27,-28,-31,-32,-33)]
+input_cont <- input_cont[, c(-3,-4,-5,-10,-13,-14,-15,-16,-17:-25,-27,-28,-31)]
+
 # Segun el criterio WOE, no aportan apenas cambio al modelo
+salida.woe <- woebin(input_bin, "varObjBin", print_step = 0)
+sapply(salida.woe[c(2:24,26:28,30:33)], function(x) x$total_iv[1]) - sapply(salida.woe[c(34:63)], function(x) x$total_iv[1])
 input_bin <- input_bin[, -c(35:64)]
 
 
 # Con la variables independientes nos encontramos con algunos casos como totalEmpresas, Industria, Construccion, ComercTTEHosteleria, Servicios e Inmuebles, donde
 # existe una elevada colinealidad entre ambas, por lo que debemos conservar la variable mas importante y descartar el resto
-corrplot(cor(Filter(is.numeric, input_bin), use="pairwise", method="pearson"), method = "circle",type = "upper", tl.cex = 0.6)
+corrplot(cor(Filter(is.numeric, input_cont[c(3,4,5,17,7,19,15,16,27:33)]), use="pairwise", method="pearson"), method = "circle",type = "upper", tl.cex = 0.7)
+corrplot(cor(Filter(is.numeric, input_bin[c(5:8,11,13,3,4,21:25,27:28)]), use="pairwise", method="pearson"), method = "circle",type = "upper", tl.cex = 0.7)
 
 # A continuacion, debemos descartar variables muy correlacionadas entre si, con el objetivo de evitar multicolinealidad en los modelos
 par(mfrow = c(1,2))
 # Para la varObjCont tiene mayor importancia Age_under19_Ptge, Age_19_65_pct, SameComAutonPtge y logxtotalEmpresas
-graficoVcramer(input_cont[,c(-1)],varObjCont)
+graficoVcramer(input_cont[,c(3,4,5,17,7,19,15,16,27:33)],varObjCont)
 # Para la varObjBin tiene mayor importancia Age_over65_pct, SameComAutonPtge y totalEmpresas
-graficoVcramer(input_bin[-c(1)],varObjBin)
+graficoVcramer(input_bin[,c(5:8,11,13,3,4,21:25,27:28)],varObjBin)
 
 # Elimino aquellas variables que no presentan una elevada correlacion
-input_cont <- input_cont[, c(-5,-13,-14,-17,-26:-31)]
-input_bin <- input_bin[, c(-3:-7,-13,-22:-25,-27,-28)]
+input_cont <- input_cont[, c(-5,-19,-16,-17,-28:-33)]
+input_bin <- input_bin[, c(-4:-7,-13,-22:-25,-27,-28)]
 
 # Finalmente, almacenamos el resultado en disco
 saveRDS(input_cont,"datosElectorales_Cont")
