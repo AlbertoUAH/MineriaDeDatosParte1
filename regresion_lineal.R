@@ -1,6 +1,7 @@
 setwd("UCM/Mineria de Datos y Modelizacion Predictiva/Practica 1/")
 source("FuncionesRosa.R")
 
+
 mostrar.estadisticas <- function(modelo, data_train, data_test, tipo = "lm", varObj) {
   if (tipo != "lm") {
     cat("Train: ", pseudoR2(modelo,data_train,varObj), "; Test: ", pseudoR2(modelo,data_test,varObj), "; ")
@@ -29,6 +30,15 @@ data_test <- input_cont[-trainIndex,]
 # MODELO 1. Construyo un modelo preliminar con todas las variables
 modelo1<-lm(formInt,data=data_train)
 mostrar.estadisticas(modelo1, data_train, data_test, "lm", "varObjCont")
+
+input_cont_copia <- input_cont
+input_cont_copia$CCAA <- recode(input_cont_copia$CCAA, "c('MA_CA_RI_CE_ME_MU_GA', 'AR_CM') = 'MA_CA_RI_CE_ME_MU_GA_AR_CM';")
+data_train_copia <- input_cont_copia[trainIndex,]
+data_test_copia <- input_cont_copia[-trainIndex,]
+
+# MODELO 1. Construyo un modelo preliminar con todas las variables
+modelo1.copia<-lm(formInt,data=data_train_copia)
+mostrar.estadisticas(modelo1.copia, data_train_copia, data_test_copia, "lm", "varObjCont")
 
 
 # MODELO 1.2
@@ -136,7 +146,8 @@ estadisticas.modelos.final.2
 # obtenidos en este modelo, sino que ademas la desviacion estandar en los valores de R2 es mas pequena
 
 #  MODELO FINAL
-formula.final <-  'varObjCont ~ CCAA + Age_19_65_pct + SameComAutonPtge + logxForeignersPtge + logxIndustryUnemploymentPtge + 
+formula.final <-  'varObjCont ~ CCAA + Age_19_65_pct + SameComAutonPtge + 
+    prop_missings + logxForeignersPtge + logxIndustryUnemploymentPtge + 
     logxServicesUnemploymentPtge + logxtotalEmpresas + CCAA:SameComAutonPtge + 
     CCAA:logxForeignersPtge'
 
@@ -147,3 +158,4 @@ modelo.final <- lm(as.formula(formula.final), data = data_train)
 validacion.cruzada(c(formula.final), "lm", data_train)
 mostrar.estadisticas(modelo.final, data_train, data_test, "lm", "varObjCont")
 summary(modelo.final)
+modelEffectSizes(modelo.final)

@@ -188,7 +188,7 @@ Transf_Auto<-function(matriz,target){
 # Gr?fico con el V de cramer de todas las variables input para saber su importancia
 graficoVcramer<-function(matriz, target){
   salidaVcramer<-sapply(matriz,function(x) Vcramer(x,target))
-  barplot(sort(salidaVcramer,decreasing =T),las=2,ylim=c(0,1), cex.names = 0.7)
+  barplot(sort(salidaVcramer,decreasing =T),las=2,ylim=c(0,1), cex.names = 0.5)
 }
 
 #Para evaluar el R2 en regr. lineal en cualquier conjunto de datos

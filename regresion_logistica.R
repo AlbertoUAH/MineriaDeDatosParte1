@@ -4,10 +4,6 @@ source("FuncionesRosa.R")
 # ---------------------------- FASE 3: REGRESION LOGISTICA ------------------------------
 input_bin<-readRDS("datosElectorales_Bin")
 
-# Antes de evaluar el modelo ¿Hay alguna categoria que podamos agrupar? Para ello, recurrimos a la libreria scorecard, empleando la funcion
-# woebin que nos permite saber si hay alguna posible agrupacion que mejore el IV (Information Value)
-input_bin$CCAA <- recode(input_bin$CCAA, "c('CV_EX_AS_BA_CA','MA_CA_RI_CE_ME_MU_GA_CM') = 'CV_EX_AS_BA_CA_MA_CA_RI_CE_ME_MU_GA_CM'")
-
 formInt.bin<-formulaInteracciones(input_bin, 1)
 
 # Obtengo la particion
@@ -18,11 +14,24 @@ trainIndex.bin <- createDataPartition(input_bin$varObjBin, p=0.8, list=FALSE)
 
 data_train.bin <- input_bin[trainIndex.bin,]
 data_test.bin <- input_bin[-trainIndex.bin,]
-formInt.bin<-formulaInteracciones(input_bin, 1)
 
 # MODELO 1. Construyo un modelo preliminar con todas las variables
 modelo1.bin<-glm(formInt.bin,data=data_train.bin, family = binomial)
 mostrar.estadisticas(modelo1.bin, data_train.bin, data_test.bin, "glm", "varObjBin") # Aun podemos mejorarlo muchisimo...
+
+input_bin_copia <- input_bin
+# Antes de evaluar el modelo ¿Hay alguna categoria que podamos agrupar? Para ello, recurrimos a la libreria scorecard, empleando la funcion
+# woebin que nos permite saber si hay alguna posible agrupacion que mejore el IV (Information Value)
+library(scorecard)
+salida.woe.ccaa <- woebin(data.frame(input_bin[, c("varObjBin", "CCAA")]), "varObjBin", print_step = 0)
+salida.woe.ccaa$CCAA$breaks
+input_bin_copia$CCAA <- recode(input_bin_copia$CCAA, "c('CV_EX_AS_BA_CA','MA_CA_RI_CE_ME_MU_GA') = 'CV_EX_AS_BA_CA_MA_CA_RI_CE_ME_MU_GA_CM'")
+data_train_copia.bin <- input_bin_copia[trainIndex.bin,]
+data_test_copia.bin <- input_bin_copia[-trainIndex.bin,]
+
+# MODELO 1 COPIA. Construyo un modelo preliminar con todas las variables
+modelo1.bin.copia<-glm(formInt.bin,data=data_train_copia.bin, family = binomial)
+mostrar.estadisticas(modelo1.bin.copia, data_train_copia.bin, data_test_copia.bin, "glm", "varObjBin")
 
 # NOTA: Con el modelo 1.2 partimos en la seleccion de variables
 # MODELO 1.2. ¿Y si eliminamos las variables con menor importancia?
@@ -31,7 +40,8 @@ importancia.var <- impVariablesLog(modelo1.bin, "varObjBin", data_train.bin)
 # Dado que crear un modelo de regresion logistica es "computacionalmente" mas costoso que un modelo de regresion lineal, debemos eliminar en la medida
 # de lo posibles aquellas variables que menos nos aporten a nuestro modelo, en especial de cara a la seleccion clasica. Por ello, de cara a las interacciones
 # nos quedaremos con aquellos cuya importancia sea "sobresaliente" con respecto al resto, es decir, los outliers obtenidos a partir del boxplot de impVariablesLog
-variables.mas.imp <- importancia.var[which(importancia.var$V5 > 0.000683), 1]
+summary(importancia.var$V5)
+variables.mas.imp <- importancia.var[which(importancia.var$V5 > 8.550e-04), "V2"] # 9.168e-04
 term.independientes <- unique(unlist(strsplit(variables.mas.imp, split = ":")))
 formInt.bin <- paste0("varObjBin~",paste0(colnames(input_bin)[-1], collapse = "+"),"+",paste0(unlist(variables.mas.imp), collapse = "+"))
 
@@ -80,6 +90,18 @@ input_bin$varObjBin<-auxVarObj
 data_train.bin <- input_bin[trainIndex.bin,]
 data_test.bin <- input_bin[-trainIndex.bin,]
 
+
+auxVarObj<-input_bin$varObjBin
+input_bin$varObjBin<-make.names(input_bin$varObjBin)
+data_train.bin <- input_bin[trainIndex.bin,]
+data_test.bin <- input_bin[-trainIndex.bin,]
+estadisticas.modelos.final.bin <- validacion.cruzada.bin(c(estadisticas.modelos.bin[c(1,2,6)]), "glm", data_train.bin)
+estadisticas.modelos.final.bin
+input_bin$varObjBin<-auxVarObj
+data_train.bin <- input_bin[trainIndex.bin,]
+data_test.bin <- input_bin[-trainIndex.bin,]
+
+
 # SELECCION ALEATORIA
 # Para el modelo aleatorio, aunque pueda conllevar mas tiempo, lo ejecutamos con la formula original, es decir, incluyendo todas
 # las posibles variables y transformaciones
@@ -93,7 +115,7 @@ auxVarObj<-input_bin$varObjBin
 input_bin$varObjBin<-make.names(input_bin$varObjBin)
 data_train.bin <- input_bin[trainIndex.bin,]
 data_test.bin <- input_bin[-trainIndex.bin,]
-estadisticas.modelos.final.2.bin <- validacion.cruzada.bin(c(estadisticas.modelos.bin[c(6)], paste("varObjBin~", rownames(modelos.aleatorios))), "glm", data_train.bin)
+estadisticas.modelos.final.2.bin <- validacion.cruzada.bin(c(estadisticas.modelos.bin[c(2,6)], paste("varObjBin~", rownames(modelos.aleatorios))), "glm", data_train.bin)
 estadisticas.modelos.final.2.bin
 input_bin$varObjBin<-auxVarObj
 data_train.bin <- input_bin[trainIndex.bin,]
@@ -103,72 +125,62 @@ data_test.bin <- input_bin[-trainIndex.bin,]
 # Con el primer modelo podemos realizar un analisis ANOVA para eliminar aquellas variables que suponga menor perdida en la varianza
 
 # MODELO FINAL
-formula.final.bin <- 'varObjBin ~ CCAA + ForeignersPtge + UnemployLess25_Ptge + AgricultureUnemploymentPtge + 
-    IndustryUnemploymentPtge + totalEmpresas + ActividadPpal + 
-    SUPERFICIE + PobChange_pct + prop_missings + CCAA:IndustryUnemploymentPtge + 
-    ForeignersPtge:ActividadPpal + CCAA:Age_over65_pct + CCAA:SameComAutonPtge'
+formula.final.bin <- 'varObjBin ~ CCAA + ForeignersPtge + AgricultureUnemploymentPtge + 
+    prop_missings + Age_over65_pct + PobChange_pct + SUPERFICIE + 
+    Population + SameComAutonDiffProvPtge + CCAA:Population'
 modelo.final.bin <- glm(formula.final.bin, data_train.bin, family = binomial)
 
-rownames(anova(modelo.final.bin, test = "Chisq"))[anova(modelo.final.bin, test = "Chisq")$`Pr(>Chi)` > 0.01][-1]
+impVariablesLog(estadisticas.modelos.bin[6]$`SBC-backward`, "varObjBin", data_train.bin)[which(impVariablesLog(estadisticas.modelos.bin[6]$`SBC-backward`, "varObjBin", data_train.bin)$V5 < 0.002), ]
 
-modelo.final.aleatorio.bin <- glm(paste0('varObjBin~', paste0(rownames(modelos.aleatorios)[3], collapse = "+")), data_train.bin, family = binomial)
+formula.final.bin.2 <- 'varObjBin ~ CCAA + 
+    ForeignersPtge + SameComAutonPtge + SameComAutonDiffProvPtge + ActividadPpal + 
+    PersonasInmueble + prop_missings + CCAA:PersonasInmueble + 
+    CCAA:SameComAutonPtge + ForeignersPtge:ActividadPpal + CCAA:prop_missings + 
+    CCAA:SameComAutonDiffProvPtge'
 
-# Modelo 1 (ANOVA)
+modelo.final.bin.2 <- glm(formula.final.bin.2, data_train.bin, family = binomial)
 mostrar.estadisticas(modelo.final.bin, data_train.bin, data_test.bin, "glm", "varObjBin")
-# Modelo 5
-mostrar.estadisticas(modelo.final.aleatorio.bin, data_train.bin, data_test.bin, "glm", "varObjBin")
+mostrar.estadisticas(modelo.final.bin.2, data_train.bin, data_test.bin, "glm", "varObjBin")
+
+summary(summary(modelo.final.bin)$coefficients[, 4])
+summary(summary(modelo.final.bin.2)$coefficients[, 4])
 
 # ¿Y las desviaciones tipicas?
 auxVarObj<-input_bin$varObjBin
 input_bin$varObjBin<-make.names(input_bin$varObjBin)
 data_train.bin <- input_bin[trainIndex.bin,]
 data_test.bin <- input_bin[-trainIndex.bin,]
-estadisticas.modelos.final.2.bin <- validacion.cruzada.bin(c(formula.final.bin, paste0('varObjBin~', paste0(rownames(modelos.aleatorios)[2], collapse = "+"))), "glm", data_train.bin)
-estadisticas.modelos.final.2.bin
+estadisticas.modelos.final.3.bin <- validacion.cruzada.bin(c(formula.final.bin, formula.final.bin.2), "glm", data_train.bin)
+estadisticas.modelos.final.3.bin
 input_bin$varObjBin<-auxVarObj
 data_train.bin <- input_bin[trainIndex.bin,]
 data_test.bin <- input_bin[-trainIndex.bin,]
 
-# MODELO GANADOR: Modelo 5
-formula.final.bin <- paste0('varObjBin~', paste0(rownames(modelos.aleatorios)[3], collapse = "+"))
-
-# Aparentemente, todo apunta a que el modelo 1 parece ser la mejor opcion (tanto en sd como en media, diferencia entre train y test, asi como en AIC).
-# Sin embargo, si echamos un vistazo a la importancia de sus variables...
-# Modelo 1
-summary(impVariablesLog(modelo.final.bin, "varObjBin", data_train.bin)$V5)
-# Modelo 5
-summary(impVariablesLog(modelo.final.aleatorio.bin, "varObjBin", data_train.bin)$V5)
-# Tanto la media como la mediana y el resto de cuartiles nos permite comprobar que la importancia de las variables en el modelo 5 es mayor al del modelo 1
-# lo cual puede deberse, entre otros motivos, al menor numero de parametros. Ademas, el modelo 1 esta prediciendo en todo momento probabilidades absolutas (0,1)
-# mientras que el modelo 5 no. Esto no tiene porque ser "algo malo", ya que esto supondria que la variable objetivo esta siendo clasificada "perfectamente" con
-# un pequeno conjunto de variables, aunque esto no tiene porque ser asi de cara a un nuevo conjunto de datos. Por tanto, elegimos como modelo ganador el modelo 5
-
+# MODELO GANADOR: Modelo 2
 # BUSCAMOS EL MEJOR PUNTO DE CORTE
 ## Generamos una rejilla con los posibles puntos de corte
 posiblesCortes<-seq(0,1,0.01)
-rejilla<-data.frame(t(rbind(posiblesCortes,sapply(posiblesCortes,function(x) sensEspCorte(modelo.final.aleatorio.bin,data_test.bin,"varObjBin",x,"1")))))
+rejilla<-data.frame(t(rbind(posiblesCortes,sapply(posiblesCortes,function(x) sensEspCorte(modelo.final.bin,data_test.bin,"varObjBin",x,"1")))))
 rejilla$Youden<-rejilla$Sensitivity+rejilla$Specificity-1
-plot(rejilla$posiblesCortes,rejilla$Youden)
-plot(rejilla$posiblesCortes,rejilla$Accuracy)
+plot(rejilla$posiblesCortes,rejilla$Accuracy, col="red")
+points(rejilla$posiblesCortes,rejilla$Youden,col="blue")
+legend("topleft",legend = c("Youden", "Accuracy"), col = c("red", "blue"), pch = c(16, 16), cex = 0.5)
 cat("Max. Indice Youden: ", rejilla$posiblesCortes[which.max(rejilla$Youden)], "\n")
 cat("Max. Precision/Accuracy: ", rejilla$posiblesCortes[which.max(rejilla$Accuracy)], "\n")
 
 # Comparamos ambos puntos de corte
 # Indice Youden
-sensEspCorte(modelo.final.aleatorio.bin,data_test.bin,"varObjBin",0.64,"1")
+sensEspCorte(modelo.final.bin,data_test.bin,"varObjBin",0.57,"1")
 
 # Indice Precision/Accuracy
-sensEspCorte(modelo.final.aleatorio.bin,data_test.bin,"varObjBin",0.53,"1")
+sensEspCorte(modelo.final.bin,data_test.bin,"varObjBin",0.5,"1")
 
 # Evaluacion del modelo ganador, empleando el indice de Youden
-roc(data_train.bin$varObjBin, predict(modelo.final.aleatorio.bin,data_train.bin,type = "response"))
-roc(data_test.bin$varObjBin, predict(modelo.final.aleatorio.bin,data_test.bin,type = "response"))
-mostrar.estadisticas(modelo.final.aleatorio.bin, data_train.bin, data_test.bin, "glm", "varObjBin")
-summary(modelo.final.aleatorio.bin)
+sensEspCorte(modelo.final.bin,data_train.bin,"varObjBin",0.5,"1")
+sensEspCorte(modelo.final.bin,data_test.bin,"varObjBin",0.5,"1")
 
-sensEspCorte(modelo.final.aleatorio.bin,data_train.bin,"varObjBin",0.64,"1")
-sensEspCorte(modelo.final.aleatorio.bin,data_test.bin,"varObjBin",0.64,"1")
-
-
-
-
+mostrar.estadisticas(modelo.final.bin, data_train.bin, data_test.bin, "glm", "varObjBin")
+summary(modelo.final.bin)
+roc(data_train.bin$varObjBin, predict(modelo.final.bin,data_train.bin,type = "response"))
+roc(data_test.bin$varObjBin, predict(modelo.final.bin,data_test.bin,type = "response"))
+impVariablesLog(modelo.final.bin, "varObjBin", data_train.bin)

@@ -9,7 +9,7 @@ datos[,c(3, 7, 11, 12, 34, 38)] <- lapply(datos[,c(3, 7, 11, 12, 34, 38)], facto
 
 # 2. El campo "Name" es un campo unicamente Identificativo, por lo que debemos descartarlo
 cat(length(unique(datos$Name)), " de ", nrow(datos), "filas\n")
-datos <- datos[, -c(1)] # Eliminamos ademas las variables objetivo que no vayamos a emplear
+datos <- datos[, -c(1)] # Eliminamos el campo identificador
 
 # ¿Y CodigoProvincia? Problema: toma 52 valores diferentes, por lo que codificarlo como factor puede llegar a "entorpecer" la elaboracion del modelo,
 # especialmente con demasiadas categorias. ¿Y si lo tratamos como una variable cuantitativa? Hay que tener mucho cuidado, ya que el hecho de utilizar el codigo de provincia
@@ -143,8 +143,8 @@ datos <- datos[, -c(4,5,6,7,8,9,10)]
 # 10. ¿Podemos agrupar categorias de variables cualitativas?
 # Comenzamos con CCAA. Para la varObjCont las agrupamos por similutud en los boxplots
 boxplot_targetbinaria(varObjCont,datos$CCAA,"CCAA")
-datos$CCAA <- recode(datos$CCAA, "c('Navarra', 'Andalucía') = 'AN_NA';
-                                  c('ComValenciana', 'Extremadura', 'Asturias', 'Baleares', 'Canarias') = 'CV_EX_AS_BA_CA'; c('Aragón', 'CastillaMancha') = 'AA_AR_CM';
+datos$CCAA <- recode(datos$CCAA, "c('Navarra', 'Andalucía') = 'AN_NA'; c('CastillaLeón') = 'AA_CL';
+                                  c('ComValenciana', 'Extremadura', 'Asturias', 'Baleares', 'Canarias') = 'CV_EX_AS_BA_CA'; c('Aragón', 'CastillaMancha') = 'AR_CM';
                                   c('Galicia', 'Cantabria', 'Madrid', 'Rioja', 'Ceuta', 'Melilla', 'Murcia') = 'MA_CA_RI_CE_ME_MU_GA'; c('Cataluña', 'PaísVasco') = 'CAT_PV'")
 
 # Construccion-Industria-Otro
