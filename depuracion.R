@@ -8,7 +8,7 @@ datos <- read_excel("DatosEleccionesEspaña.xlsx",sheet = 1)
 datos[,c(3, 7, 11, 12, 34, 38)] <- lapply(datos[,c(3, 7, 11, 12, 34, 38)], factor)
 
 # 2. El campo "Name" es un campo unicamente Identificativo, por lo que debemos descartarlo
-cat(length(unique(datos$Name)), " de ", nrow(datos), "filas\n")
+cat("Nombres de municipio unicos: ", length(unique(datos$Name)), " de ", nrow(datos), "filas. Numero columnas: ", ncol(datos) , "\n")
 datos <- datos[, -c(1)] # Eliminamos el campo identificador
 
 # ¿Y CodigoProvincia? Problema: toma 52 valores diferentes, por lo que codificarlo como factor puede llegar a "entorpecer" la elaboracion del modelo,
