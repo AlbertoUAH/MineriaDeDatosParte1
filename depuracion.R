@@ -1,3 +1,4 @@
+# Autor: Fernandez Hernandez, Alberto
 setwd("UCM/Mineria de Datos y Modelizacion Predictiva/Practica 1/")
 source("FuncionesRosa.R")
 library(readxl)
@@ -38,17 +39,17 @@ datos$PobChange_pct <-replace(datos$PobChange_pct, which(datos$PobChange_pct > 1
 # En este caso, con la columna Explotaciones, con valores a 99999
 datos$Explotaciones<-replace(datos$Explotaciones,which(datos$Explotaciones==99999),NA)
 
-# 5. Missings no declarados variables cualitativas
+# 4. Missings no declarados variables cualitativas
 t(freq(datos$Densidad)) # Nos encontramos con una categoria desconocida "?"
 datos$Densidad<-recode.na(datos$Densidad,"?")
 
-# 7. Variables con elevada asimetria/kurtosis (Population, TotalCensus, totalEmpresas, ComercTTEHosteleria, Servicios, inmuebles, Pob2010 y SUPERFICIE)
+# 5. Variables con elevada asimetria/kurtosis (Population, TotalCensus, totalEmpresas, ComercTTEHosteleria, Servicios, inmuebles, Pob2010 y SUPERFICIE)
 describe(datos[c("Population", "TotalCensus", "totalEmpresas", "ComercTTEHosteleria", 
                  "Servicios", "inmuebles", "Pob2010", "SUPERFICIE")])[, c(4, 11, 12)]
 # Como podemos comprobar, la asimetria en las variables anteriores se debe, principalmente, a la grandes ciudades (Madrid, Barcelona) donde hay una mayor poblacion,
 # un mayor numero de empresas y, por ello, mayor numero de inmuebles y actividades
 
-# 8. Valores Atipicos
+# 6. Valores Atipicos
 # En primer lugar, contamos el porcentaje de valores atipicos de cada variable. Si son muchos, los eliminamos
 original <- sapply(Filter(is.numeric, datos),function(x) atipicosAmissing(x)[[2]]) * 100/nrow(datos)
 original[which(original == max(original))]
@@ -56,25 +57,27 @@ original[which(original == max(original))]
 # Nota: Otros_Pct, al ser una variable objetivo, no vamos a modificar su valores atipicos
 datos[,(which(sapply(datos, class)=="numeric")[-6])]<-sapply(datos[, c(which(sapply(datos, class)=="numeric")[-6])],function(x) atipicosAmissing(x)[[1]])
 
-# 9. Missings
+# 7. Missings
 # Se aprecia un patron de comportamiento: cuando los datos de la poblacion/censo no aparecen, tampoco se encuentra el numero total de empresas o el numero total
 # dedicadas a la industria, construccion, comercio, servicios, el numero de inmuebles o la poblacion del ano 2010. Del mismo modo, si no se registran los datos de 
 # un sector, el del resto tampoco suele aparecer (Ejemplo: si no se registra el numero total de empresas, es poco comun que aparezca el numero de empresas de algun sector)
 # INDICIO: ¿totalEmpresas se obtiene de la suma de cada sector?
-# INDICIO: Si el campo Population no aparece, tampoco suele mostrarse su censo total
+# INDICIO: Si el campo Population no aparece, tampoco suele mostrarse su censo total (realmente tiene sentido, ya que el censo total depende de la cantidad de poblacion en el municipio)
 mostrar_correlacion_na <- function() {
   corrplot(cor(is.na(datos[colnames(datos)[colSums(is.na(datos))>0]])),method = "ellipse",type = "upper")
 }
 
 # A continuacion, obtenemos la proporcion de missings por variable y observacion
 # Por observacion: creamos un nuevo campo
-datos$prop_missings<-apply(is.na(datos[, c(-4,-5,-6,-7,-8,-9,-10)]),1,mean) * 100
+datos$prop_missings<-apply(is.na(datos[, c(-4,-5,-6,-7,-8,-9,-10)]),1,mean) * 100 # No tenemos en cuenta las variables objetivo 
 max(datos$prop_missings)
 # Max = 37.5 % -> Tengo alguna observacion con un 37.5 % de los datos a missing
 
 # Por variable, obtenemos la media
 # La columna con el mayor porcentaje de missings es del 12.64 %
 (prop_missingsVars<-max(apply(is.na(datos[, c(-4,-5,-6,-7,-8,-9,-10)]),2,mean) * 100))
+
+summary(datos$prop_missings) # Solo el 75 % de las observaciones contienen aproximadamente un 3 % de valores _missings_ o menos
 # En ambos casos no superan el 50 % (por lo que no los eliminamos)
 
 # ¿Como imputamos los valores?
@@ -119,10 +122,8 @@ summary(datos$Densidad)
 # ¿Cuanto ha variado el porcentaje de correlacion tras la depuracion?
 corr.posterior <- cor(datos[,unlist(lapply(datos, is.numeric))], use = "complete.obs" , method="pearson")
 comparacion.corr <- corr.posterior[-33, -33] - corr.previa
+# Un 82.55 % de las correlaciones originales ha variado en menos de 0.2 con respecto a su correlación original, bastante buen porcentaje
 sum(abs(comparacion.corr) < 0.2) * 100 / (dim(comparacion.corr)[1] * dim(comparacion.corr)[2])
-final <- sapply(Filter(is.numeric, datos),function(x) atipicosAmissing(x)[[2]]) * 100/nrow(datos)
-original[original > 5]
-final[final > 5]
 
 # ¿Que variable elegimos?
 # Como variable objetivo continua elegimos el campo Dcha_Pct, ya que pese a la elevada correlaciomn del campo Otros_Pct, presenta un mayor porcentaje de outliers, 
@@ -147,12 +148,11 @@ datos$CCAA <- recode(datos$CCAA, "c('Navarra', 'Andalucía') = 'AN_NA'; c('Casti
                                   c('ComValenciana', 'Extremadura', 'Asturias', 'Baleares', 'Canarias') = 'CV_EX_AS_BA_CA'; c('Aragón', 'CastillaMancha') = 'AR_CM';
                                   c('Galicia', 'Cantabria', 'Madrid', 'Rioja', 'Ceuta', 'Melilla', 'Murcia') = 'MA_CA_RI_CE_ME_MU_GA'; c('Cataluña', 'PaísVasco') = 'CAT_PV'")
 
-# Construccion-Industria-Otro
-# Para este caso nos basamos en el grafico de mosaico. Vemos que aquellos municipios dedicados a la Construccion, Industria u Otros presentan una mayor tendencia de voto a la derecha
+# ¿Y con ActividadPpal? Agrupamos Construccion e Industria con Otros (presentan una amplitud similar en el diagrama de caja y bigotes)
 boxplot_targetbinaria(varObjCont,datos$ActividadPpal,"Actividad Principal")
 datos$ActividadPpal <- recode(datos$ActividadPpal, "c('Construccion', 'Industria', 'Otro') = 'Construccion_Industria_Otro';")
 
-# Busco las mejores transformaciones para las variables numericas con respesto a los dos tipos de variables
+# 11. Busco las mejores transformaciones para las variables numericas con respesto a los dos tipos de variables
 input_cont<-data.frame(varObjCont,datos,Transf_Auto(Filter(is.numeric, datos),varObjCont))
 input_bin<-data.frame(varObjBin,datos,Transf_Auto(Filter(is.numeric, datos),varObjBin))
 
@@ -166,7 +166,7 @@ sapply(salida.woe[c(2:24,26:28,30:33)], function(x) x$total_iv[1]) - sapply(sali
 input_bin <- input_bin[, -c(35:64)]
 
 
-# Con la variables independientes nos encontramos con algunos casos como totalEmpresas, Industria, Construccion, ComercTTEHosteleria, Servicios e Inmuebles, donde
+# 12. Con la variables independientes nos encontramos con algunos casos como totalEmpresas, Industria, Construccion, ComercTTEHosteleria, Servicios e Inmuebles, donde
 # existe una elevada colinealidad entre ambas, por lo que debemos conservar la variable mas importante y descartar el resto
 corrplot(cor(Filter(is.numeric, input_cont[c(3,4,5,17,7,19,15,16,27:33)]), use="pairwise", method="pearson"), method = "circle",type = "upper", tl.cex = 0.7)
 corrplot(cor(Filter(is.numeric, input_bin[c(5:8,11,13,3,4,21:25,27:28)]), use="pairwise", method="pearson"), method = "circle",type = "upper", tl.cex = 0.7)

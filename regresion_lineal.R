@@ -1,3 +1,4 @@
+# Autor: Fernandez Hernandez, Alberto
 setwd("UCM/Mineria de Datos y Modelizacion Predictiva/Practica 1/")
 source("FuncionesRosa.R")
 
@@ -31,12 +32,13 @@ data_test <- input_cont[-trainIndex,]
 modelo1<-lm(formInt,data=data_train)
 mostrar.estadisticas(modelo1, data_train, data_test, "lm", "varObjCont")
 
+# ¿Y si agrupamos MA_CA_RI_CE_ME_MU_GA con AR_CM?
 input_cont_copia <- input_cont
 input_cont_copia$CCAA <- recode(input_cont_copia$CCAA, "c('MA_CA_RI_CE_ME_MU_GA', 'AR_CM') = 'MA_CA_RI_CE_ME_MU_GA_AR_CM';")
 data_train_copia <- input_cont_copia[trainIndex,]
 data_test_copia <- input_cont_copia[-trainIndex,]
 
-# MODELO 1. Construyo un modelo preliminar con todas las variables
+# MODELO 1 (COPIA). Aumenta la diferencia entre el R2 train y test, ademas del AIC, por lo que dejamos las categorias sin agrupar
 modelo1.copia<-lm(formInt,data=data_train_copia)
 mostrar.estadisticas(modelo1.copia, data_train_copia, data_test_copia, "lm", "varObjCont")
 
@@ -44,13 +46,14 @@ mostrar.estadisticas(modelo1.copia, data_train_copia, data_test_copia, "lm", "va
 # MODELO 1.2
 # No obstante, aun podemos mejorar el modelo. Seguimos teniendo demasiadas variables
 variacion.r2 <- modelEffectSizes(modelo1)
-summary(variacion.r2$Effects[, 4]) # El 75 % de las variables suponen una importancia de 0.0003239 en el R2 o menos
-variables.mas.imp <- names(boxplot(variacion.r2$Effects[, 4], plot = FALSE)$out)# rownames(variacion.r2$Effects[variacion.r2$Effects[, 4] > 0.0003239, ])[c(-1)] # Nos quedamos con el 25 % restante
+summary(variacion.r2$Effects[, 4]) # El 75 % de las variables suponen una importancia de 0.0003355 en el R2 o menos
+# Hay mucha diferencia entre el tercer cuartil y el valor maximo, por lo que nos centramos en las interacciones "atipicas" (outliers) que mayor importancia aporten al R2
+variables.mas.imp <- names(boxplot(variacion.r2$Effects[, 4], plot = FALSE)$out)
 
 formInt <- paste0("varObjCont~",paste0(colnames(input_cont[-1]), collapse = "+"),"+",paste0(variables.mas.imp, collapse = "+"))
 modelo1.2<-lm(as.formula(formInt),data=data_train)
-# Mejora el R^2 test, aunque baja ligeramente R^2 train (lo cual reduce la diferencia entre ambos R^2)
-# El numero de variables tambien se ve reducido, pasando de 224 a 93 parametros
+# Mejora el R^2 test, aunque baja ligeramente R^2 train (lo cual reduce la diferencia entre ambos R^2). Aunque el AIC aumenta en algo mas de 100 puntos, el SBC mejora en mas de 1000
+# El numero de variables tambien se ve reducido, pasando de 234 a 45 parametros
 mostrar.estadisticas(modelo1.2, data_train, data_test, "lm", "varObjCont")
 
 # NOTA: Con el modelo 1.2 partimos en la seleccion de variables
@@ -106,10 +109,7 @@ validacion.cruzada <- function(modelos, metodo, data_train) {
   data.frame(setNames(aggregate(Rsquared~modelo, data = total, mean), c("modelo", "media")), sd = aggregate(Rsquared~modelo, data = total, sd)[, 2])
 }
 
-# De cara a la comparacion final, nos quedamos con el sexto modelo, por varios motivos: en primer lugar, aunque no sean el
-# modelo con menos parametros presenta una diferencia baja entre los valores obtenidos entre los datos de entrenamiento y prueba. Ademas, si
-# lo comparamos con los modelos 2 y 4 presenta un AIC y SBC mas bajo, ademas de una desviacion tipica menor en su R2 (mejor bonda media). 
-# Dado que son 44 parametros, en caso de resultar ser el modelo ganador podemos eliminar aquellas variables con menor significancia
+# De cara a la comparacion final, nos quedamos con el sexto modelo
 estadisticas.modelos.final <- validacion.cruzada(c(estadisticas.modelos), "lm", data_train)
 estadisticas.modelos.final
 
@@ -152,10 +152,7 @@ formula.final <-  'varObjCont ~ CCAA + Age_19_65_pct + SameComAutonPtge +
     CCAA:logxForeignersPtge'
 
 modelo.final <- lm(as.formula(formula.final), data = data_train)
-
-# Se reduce la desviacion tipica (de 0.01342411 a 0.0133745), aunque el valor medio de R2 disminuye ligeramente (de 0.7248011 a 0.7234081)
-# Evaluacion del modelo ganador
-validacion.cruzada(c(formula.final), "lm", data_train)
+estadisticas.modelos.final[6,]
 mostrar.estadisticas(modelo.final, data_train, data_test, "lm", "varObjCont")
 summary(modelo.final)
 modelEffectSizes(modelo.final)

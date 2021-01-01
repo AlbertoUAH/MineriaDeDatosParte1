@@ -1,3 +1,4 @@
+# Autor: Fernandez Hernandez, Alberto
 setwd("UCM/Mineria de Datos y Modelizacion Predictiva/Practica 1/")
 source("FuncionesRosa.R")
 
@@ -20,7 +21,7 @@ modelo1.bin<-glm(formInt.bin,data=data_train.bin, family = binomial)
 mostrar.estadisticas(modelo1.bin, data_train.bin, data_test.bin, "glm", "varObjBin") # Aun podemos mejorarlo muchisimo...
 
 input_bin_copia <- input_bin
-# Antes de evaluar el modelo ¿Hay alguna categoria que podamos agrupar? Para ello, recurrimos a la libreria scorecard, empleando la funcion
+# ¿Hay alguna categoria que podamos agrupar? Para ello, recurrimos a la libreria scorecard, empleando la funcion
 # woebin que nos permite saber si hay alguna posible agrupacion que mejore el IV (Information Value)
 library(scorecard)
 salida.woe.ccaa <- woebin(data.frame(input_bin[, c("varObjBin", "CCAA")]), "varObjBin", print_step = 0)
@@ -29,7 +30,7 @@ input_bin_copia$CCAA <- recode(input_bin_copia$CCAA, "c('CV_EX_AS_BA_CA','MA_CA_
 data_train_copia.bin <- input_bin_copia[trainIndex.bin,]
 data_test_copia.bin <- input_bin_copia[-trainIndex.bin,]
 
-# MODELO 1 COPIA. Construyo un modelo preliminar con todas las variables
+# MODELO 1 COPIA. Construyo el modelo con las categorias agrupadas
 modelo1.bin.copia<-glm(formInt.bin,data=data_train_copia.bin, family = binomial)
 mostrar.estadisticas(modelo1.bin.copia, data_train_copia.bin, data_test_copia.bin, "glm", "varObjBin")
 
@@ -39,14 +40,14 @@ importancia.var <- impVariablesLog(modelo1.bin, "varObjBin", data_train.bin)
 
 # Dado que crear un modelo de regresion logistica es "computacionalmente" mas costoso que un modelo de regresion lineal, debemos eliminar en la medida
 # de lo posibles aquellas variables que menos nos aporten a nuestro modelo, en especial de cara a la seleccion clasica. Por ello, de cara a las interacciones
-# nos quedaremos con aquellos cuya importancia sea "sobresaliente" con respecto al resto, es decir, los outliers obtenidos a partir del boxplot de impVariablesLog
+# nos quedaremos con aquellos cuya importancia este por encima del tercer cuartil (0.000855)
 summary(importancia.var$V5)
-variables.mas.imp <- importancia.var[which(importancia.var$V5 > 8.550e-04), "V2"] # 9.168e-04
+variables.mas.imp <- importancia.var[which(importancia.var$V5 > 8.550e-04), "V2"]
 term.independientes <- unique(unlist(strsplit(variables.mas.imp, split = ":")))
 formInt.bin <- paste0("varObjBin~",paste0(colnames(input_bin)[-1], collapse = "+"),"+",paste0(unlist(variables.mas.imp), collapse = "+"))
 
 modelo1.2.bin<-glm(formInt.bin,data=data_train.bin, family = binomial)
-# Aunque el AIC aumenta, el modelo se ve reducido en el numero de parametros, facilitando "computacionalmente" el proceso de seleccion clasica
+# Tanto el AIC como el SBC se ve reducido significativamente. Sin embargo, el modelo no converge (tenemos que eliminar variables)
 mostrar.estadisticas(modelo1.2.bin, data_train.bin, data_test.bin, "glm", "varObjBin") 
 
 # SELECCION CLASICA
@@ -81,9 +82,8 @@ validacion.cruzada.bin <- function(modelos, metodo, data_train) {
   data.frame(setNames(aggregate(roc~modelo, data = total, mean), c("modelo", "media")), sd = aggregate(roc~modelo, data = total, sd)[, 2])
 }
 estadisticas.modelos.final.bin <- validacion.cruzada.bin(c(estadisticas.modelos.bin), "glm", data_train.bin)
-# De cara a la seleccion aleatoria nos quedaremos tanto con el primer como con el cuarto modelo, dado que la diferencia entre el train y el test en el 
-# resto de modelos es negativa, lo cual es un indicativo de que pueden sobrar parametros en el modelo. Por el contrario, en el primer y cuarto modelo la
-# la diferencia es positiva
+# De cara a la seleccion aleatoria nos quedaremos tanto con el segundo como con el sexto modelo, ya que pese a que el sexto modelo mejora en cuanto a AIC, SBC y desviacion tipica,
+# la diferencia entre ambos es muy pequena, ademas de que el segundo modelo presenta un menor numero de parametros (40 frente a 19)
 estadisticas.modelos.final.bin
 
 input_bin$varObjBin<-auxVarObj
@@ -111,6 +111,7 @@ modelos.aleatorios <- seleccion.aleatoria(formInt.bin, data_train.bin, "glm")
 # Estadisticas de los modelos aleatorios
 for (x in rownames(modelos.aleatorios)) { mostrar.estadisticas(glm(paste0('varObjBin~', x), data_train.bin, family = binomial), data_train.bin, data_test.bin, "glm", "varObjBin") }
 
+# Los modelos de seleccion aleatoria no aportan ninguna mejora al modelo, pese a reducir el numero de variables
 auxVarObj<-input_bin$varObjBin
 input_bin$varObjBin<-make.names(input_bin$varObjBin)
 data_train.bin <- input_bin[trainIndex.bin,]
@@ -121,17 +122,19 @@ input_bin$varObjBin<-auxVarObj
 data_train.bin <- input_bin[trainIndex.bin,]
 data_test.bin <- input_bin[-trainIndex.bin,]
 
-# ¿Que modelo es el mejor? ¿El primero o el cuarto?
-# Con el primer modelo podemos realizar un analisis ANOVA para eliminar aquellas variables que suponga menor perdida en la varianza
-
-# MODELO FINAL
+# ¿Que modelo es el mejor? ¿El segundo o el sexto de la seleccion clasica?
+# Finalmente, comparamos tanto el modelo 2 como el modelo 6 obtenidos en la seleccion clasica. Dado que el modelo 6 pesenta un elevado numero de variables,
+# eliminamos las menos significativas (mediante impVariablesLog), esto es, aquellas variables que aporten menos de 0.002 al R2: Population, PobChange_pct, SUPERFICIE,
+# Age_over65_pct y AgricultureUnemploymentPtge
+# MODELOS CANDIDATOS
+# Modelo 2
 formula.final.bin <- 'varObjBin ~ CCAA + ForeignersPtge + AgricultureUnemploymentPtge + 
     prop_missings + Age_over65_pct + PobChange_pct + SUPERFICIE + 
     Population + SameComAutonDiffProvPtge + CCAA:Population'
 modelo.final.bin <- glm(formula.final.bin, data_train.bin, family = binomial)
 
+# Modelo 6 (modificado), eliminando las 5 variables menos significativas mencionadas anteriormente
 impVariablesLog(estadisticas.modelos.bin[6]$`SBC-backward`, "varObjBin", data_train.bin)[which(impVariablesLog(estadisticas.modelos.bin[6]$`SBC-backward`, "varObjBin", data_train.bin)$V5 < 0.002), ]
-
 formula.final.bin.2 <- 'varObjBin ~ CCAA + 
     ForeignersPtge + SameComAutonPtge + SameComAutonDiffProvPtge + ActividadPpal + 
     PersonasInmueble + prop_missings + CCAA:PersonasInmueble + 
@@ -139,13 +142,12 @@ formula.final.bin.2 <- 'varObjBin ~ CCAA +
     CCAA:SameComAutonDiffProvPtge'
 
 modelo.final.bin.2 <- glm(formula.final.bin.2, data_train.bin, family = binomial)
+# El modelo 6 no mejora tanto en el AIC como en el SBC
 mostrar.estadisticas(modelo.final.bin, data_train.bin, data_test.bin, "glm", "varObjBin")
 mostrar.estadisticas(modelo.final.bin.2, data_train.bin, data_test.bin, "glm", "varObjBin")
 
-summary(summary(modelo.final.bin)$coefficients[, 4])
-summary(summary(modelo.final.bin.2)$coefficients[, 4])
-
 # ¿Y las desviaciones tipicas?
+# Aunque el modelo 6 ve reducido su desviacion tipica, sigue sin aclarar cual es mejor modelo
 auxVarObj<-input_bin$varObjBin
 input_bin$varObjBin<-make.names(input_bin$varObjBin)
 data_train.bin <- input_bin[trainIndex.bin,]
@@ -156,7 +158,13 @@ input_bin$varObjBin<-auxVarObj
 data_train.bin <- input_bin[trainIndex.bin,]
 data_test.bin <- input_bin[-trainIndex.bin,]
 
-# MODELO GANADOR: Modelo 2
+# Para decantarnos por uno de los dos modelos comparemos el p-valor de cada uno
+# En el modelo 2, el 75 % de sus coeficientes presentan un p-valor de 0.001 o menos (3er cuartil),
+# mientras que en el modelo 6 solo el 50 % de las variables esta por debajo de 0.008
+summary(summary(modelo.final.bin)$coefficients[, 4])
+summary(summary(modelo.final.bin.2)$coefficients[, 4])
+
+# MODELO GANADOR: Modelo 2 (Siguiendo el principio de parsimonia ademas de la importancia general de los coeficientes)
 # BUSCAMOS EL MEJOR PUNTO DE CORTE
 ## Generamos una rejilla con los posibles puntos de corte
 posiblesCortes<-seq(0,1,0.01)
@@ -175,10 +183,12 @@ sensEspCorte(modelo.final.bin,data_test.bin,"varObjBin",0.57,"1")
 # Indice Precision/Accuracy
 sensEspCorte(modelo.final.bin,data_test.bin,"varObjBin",0.5,"1")
 
-# Evaluacion del modelo ganador, empleando el indice de Youden
-sensEspCorte(modelo.final.bin,data_train.bin,"varObjBin",0.5,"1")
-sensEspCorte(modelo.final.bin,data_test.bin,"varObjBin",0.5,"1")
+# El indice de Youden no solo presenta un nivel de sensitividad alto (91 %) sino que ademas la tasa de especificidad o tasa de verdaderos negativos es mucho mejor
+# (70 % frente al 66 % del indice ACCURACY). Por tanto, con el objetivo de maximizar tanto la tasa de sensitividad como la tasa de especifidad elegimos el indice de Youden
+sensEspCorte(modelo.final.bin,data_train.bin,"varObjBin",0.57,"1")
+sensEspCorte(modelo.final.bin,data_test.bin,"varObjBin",0.57,"1")
 
+# Evaluacion del modelo final
 mostrar.estadisticas(modelo.final.bin, data_train.bin, data_test.bin, "glm", "varObjBin")
 summary(modelo.final.bin)
 roc(data_train.bin$varObjBin, predict(modelo.final.bin,data_train.bin,type = "response"))
