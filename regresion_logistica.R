@@ -34,6 +34,11 @@ data_test_copia.bin <- input_bin_copia[-trainIndex.bin,]
 modelo1.bin.copia<-glm(formInt.bin,data=data_train_copia.bin, family = binomial)
 mostrar.estadisticas(modelo1.bin.copia, data_train_copia.bin, data_test_copia.bin, "glm", "varObjBin")
 
+input_bin$CCAA <- recode(input_bin$CCAA, "c('CV_EX_AS_BA_CA','MA_CA_RI_CE_ME_MU_GA') = 'CV_EX_AS_BA_CA_MA_CA_RI_CE_ME_MU_GA_CM'")
+data_train.bin <- input_bin[trainIndex.bin,]
+data_test.bin <- input_bin[-trainIndex.bin,]
+modelo1.bin<-glm(formInt.bin,data=data_train.bin, family = binomial)
+
 # NOTA: Con el modelo 1.2 partimos en la seleccion de variables
 # MODELO 1.2. ¿Y si eliminamos las variables con menor importancia?
 importancia.var <- impVariablesLog(modelo1.bin, "varObjBin", data_train.bin)
@@ -42,7 +47,7 @@ importancia.var <- impVariablesLog(modelo1.bin, "varObjBin", data_train.bin)
 # de lo posibles aquellas variables que menos nos aporten a nuestro modelo, en especial de cara a la seleccion clasica. Por ello, de cara a las interacciones
 # nos quedaremos con aquellos cuya importancia este por encima del tercer cuartil (0.000855)
 summary(importancia.var$V5)
-variables.mas.imp <- importancia.var[which(importancia.var$V5 > 8.550e-04), "V2"]
+variables.mas.imp <- importancia.var[which(importancia.var$V5 > 9.168e-04), "V2"]
 term.independientes <- unique(unlist(strsplit(variables.mas.imp, split = ":")))
 formInt.bin <- paste0("varObjBin~",paste0(colnames(input_bin)[-1], collapse = "+"),"+",paste0(unlist(variables.mas.imp), collapse = "+"))
 
