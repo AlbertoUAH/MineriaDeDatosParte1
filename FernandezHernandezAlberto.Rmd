@@ -12,7 +12,6 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
-
 \newpage
 \small
 ```{r, echo=FALSE, include=FALSE}
@@ -43,7 +42,7 @@ Salvo excepciones, en las que el nombre del municipio coincide, se trata de un c
 datos <- datos[, -c(1)] # Eliminamos el campo identificador
 ```
 
-Por otro lado, nos encontramos con el campo _CodigoProvincia_ que, a diferencia del anterior, el número de valores diferentes es significativamente menor (52 valores únicos). No obstante, nos encontramos ante la siguiente duda ¿Mantenemos los datos en formato numérico o los recategorizamos a _factor_? Por un lado, recategorizarlo como una variable cualitativa puede llegar a entorpecer la elaboración del modelo, en especial si una o varias de las categorías no está lo suficientemente representada y debe ser agrupada. Por otro lado, si queremos mantener la variable como un campo numérico tiene que aportar "sentido" al modelo, esto es, asegurar que la media del código de provincia es de 26.67, por ejemplo, no aporta información, además de que no tiene sentido hablar de media o mediana en este campo. Por otro lado, si quisiéramos emplearlo como un campo más, deberá aportar un cierto grado de importancia, tanto a las variables objetivo cuantitativas como cualitativas:
+Por otro lado, nos encontramos con el campo _CodigoProvincia_ que, a diferencia del anterior, el número de valores diferentes es significativamente menor (52 valores únicos). No obstante, nos encontramos ante la siguiente duda ¿Mantenemos los datos en formato numérico o los recategorizamos a _factor_? Por un lado, recategorizarlo como una variable cualitativa puede llegar a entorpecer la elaboración del modelo, en especial si una o varias de las categorías no está lo suficientemente representada y debe ser agrupada. Por otro lado, si queremos mantener la variable como un campo numérico tiene que aportar "sentido" al modelo, esto es, asegurar que la media del código de provincia es de 26.67, por ejemplo, no aporta información, además de que no tiene sentido hablar de media o mediana en este campo. Por otro lado, si quisiéramos emplearlo como un campo más, deberá aportar un cierto grado de importancia, tanto a las variables objetivo cuantitativas como cualitativas, mediante la correlación y la V de Cramer, respectivamente:
 
 ```{r}
 # Columnas 5,7,8 y 9 correspondientes con las variables objetivo cuantitativas
@@ -59,14 +58,14 @@ salida
 datos <- datos[, -c(1)] # Lo eliminamos
 ```
 
-Como podemos observar en ambas salidas, la correlación tanto en las variables cuantitativas como cualitativas no superan el 0.12 y 0.23 respectivamente, valores bastante bajos, por lo que podemos descartar la variables para ambos modelos. Antes de continuar, de cara a valorar la calidad de la depuración final guardamos en una variable los valores de correlación originales, con el objetivo de compararlos con los del conjunto de datos ya depurado:
+Como podemos observar en ambas salidas, la relación tanto en las variables cuantitativas como cualitativas no superan el 0.12 y 0.23 respectivamente, valores bastante bajos, por lo que podemos descartar la variable para ambos modelos. Antes de continuar, de cara a valorar la calidad de la depuración final guardamos en una variable los valores de correlación originales, con el objetivo de compararlos con los del conjunto de datos ya depurado:
 
 ```{r}
 corr.previa <- cor(datos[,unlist(lapply(datos, is.numeric))], use="complete.obs", method="pearson")
 ```
 
 ## 1.1 Valores erróneos o no declarados
-A continuación, procedemos a eliminar aquellos valores no declarados en las variables, así como posible valores fuera de rango:
+A continuación, procedemos a eliminar aquellos valores no declarados en las variables, así como posibles valores fuera de rango:
 
 1. _ForeignersPtge_ negativos. Porcentajes de extranjeros menores a cero:
 
@@ -322,6 +321,9 @@ c('ComValenciana', 'Extremadura', 'Asturias', 'Baleares', 'Canarias') = 'CV_EX_A
 c('Aragón', 'CastillaMancha') = 'AR_CM'; c('CastillaLeón') = 'AA_CL'; 
 c('Galicia', 'Cantabria', 'Madrid', 'Rioja', 'Ceuta', 'Melilla', 'Murcia') = 'MA_CA_RI_CE_ME_MU_GA';")
 ```
+```{r, echo=FALSE}
+t(freq(datos$CCAA))
+```
 
 En contraposición, nos encontramos con el campo _ActividadPpal_:
 
@@ -329,7 +331,7 @@ En contraposición, nos encontramos con el campo _ActividadPpal_:
 t(freq(datos$ActividadPpal))
 ```
 
-En este campo, las categorías _Construccion_ e _Industria_ apenas tienen 14 y 13 apariciones, respectivamente. Por ello, dado que solo hay que agrupar dos categorías con poca representación (a diferencia de las CCAA donde teníamos 19), lo agruparemos con la categoría con mayor representación: _Otro_, dado que dispone de una amplitud similar en el diagrama de caja y bigotes:
+En este campo, las categorías _Construccion_ e _Industria_ apenas tienen 14 y 13 apariciones, respectivamente. Por ello, dado que solo hay que agrupar dos categorías con poca representación (a diferencia de las CCAA donde teníamos 19), lo agruparemos con la categoría con mayor representación: _Otro_:
 
 ```{r}
 datos$ActividadPpal <- recode(datos$ActividadPpal, 
@@ -760,10 +762,10 @@ summary(modelo.final.bin)
 2. __Age_over65_pct__: 0.02919. Es decir, __por cada incremento unitario en el porcentaje de población mayor a 65 años, la ODD de una mayoría de votos a la derecha aumenta en 0.02919 unidades__. Por tanto, podemos decir que el aumento en el porcentaje de población superior a 65 años es directamente proporcional al aumento de la probabilidad de que en dicho municipio resulte ganador la derecha.
 
 
-En última instancia, realizamos un análisis de la importancia de las últimas cuatro variables del modelo final:
+En última instancia, realizamos un análisis de la importancia de las últimas tres variables del modelo final:
 
 ```{r}
-impVariablesLog(modelo.final.bin, "varObjBin", data_train.bin)[c(1:4), ]
+impVariablesLog(modelo.final.bin, "varObjBin", data_train.bin)[c(1:3), ]
 ```
 
 Podemos comprobar cómo las variables más influyentes en el modelo son _ForeignersPtge_, la interacción entre las CCAA y _Population_, así como _prop_missings_. No obstante, también nos encontramos con variables cuya importancia en el modelo es mucho menor, variables como _SameComAutonDiffProvPtge_, _PobChange_pct_ y _SUPERFICIE_, ¿Quizás sobren estas tres últimas? Si las eliminamos del modelo, obtendríamos el siguiente resultado:
