@@ -2,7 +2,6 @@
 setwd("UCM/Mineria de Datos y Modelizacion Predictiva/Practica 1/")
 source("FuncionesRosa.R")
 
-
 mostrar.estadisticas <- function(modelo, data_train, data_test, tipo = "lm", varObj) {
   if (tipo != "lm") {
     cat("Train: ", pseudoR2(modelo,data_train,varObj), "; Test: ", pseudoR2(modelo,data_test,varObj), "; ")
@@ -42,15 +41,14 @@ data_test_copia <- input_cont_copia[-trainIndex,]
 modelo1.copia<-lm(formInt,data=data_train_copia)
 mostrar.estadisticas(modelo1.copia, data_train_copia, data_test_copia, "lm", "varObjCont")
 
-
 # MODELO 1.2
 # No obstante, aun podemos mejorar el modelo. Seguimos teniendo demasiadas variables
-variacion.r2 <- modelEffectSizes(modelo1)
+variacion.r2 <- modelEffectSizes(modelo1, Print = FALSE)
 summary(variacion.r2$Effects[, 4]) # El 75 % de las variables suponen una importancia de 0.0003355 en el R2 o menos
 # Hay mucha diferencia entre el tercer cuartil y el valor maximo, por lo que nos centramos en las interacciones "atipicas" (outliers) que mayor importancia aporten al R2
 variables.mas.imp <- names(boxplot(variacion.r2$Effects[, 4], plot = FALSE)$out)
 
-formInt <- paste0("varObjCont~",paste0(colnames(input_cont[-1]), collapse = "+"),"+",paste0(variables.mas.imp, collapse = "+"))
+formInt <- paste0("varObjCont~",paste0(colnames(input_cont[-1]), collapse = "+"),"+",paste0(variables.mas.imp[c(-1)], collapse = "+"))
 modelo1.2<-lm(as.formula(formInt),data=data_train)
 # Mejora el R^2 test, aunque baja ligeramente R^2 train (lo cual reduce la diferencia entre ambos R^2). Aunque el AIC aumenta en algo mas de 100 puntos, el SBC mejora en mas de 1000
 # El numero de variables tambien se ve reducido, pasando de 234 a 45 parametros
@@ -113,6 +111,14 @@ validacion.cruzada <- function(modelos, metodo, data_train) {
 estadisticas.modelos.final <- validacion.cruzada(c(estadisticas.modelos), "lm", data_train)
 estadisticas.modelos.final
 
+# ¿Que diferencia al modelo 6 del modelo 1?
+cat("¿Que tiene el modelo 2 que no tenga el modelo 6?", Reduce(setdiff, strsplit(c(as.character(estadisticas.modelos[2]$`SBC-both`$call)[2], 
+                                                                                   as.character(estadisticas.modelos[6]$`SBC-backward`$call)[2]), split = " ")), "\n")
+cat("¿Que tiene el modelo 6 que no tenga el modelo 2?", Reduce(setdiff, strsplit(c(as.character(estadisticas.modelos[6]$`SBC-backward`$call)[2], 
+                                                                                   as.character(estadisticas.modelos[2]$`SBC-both`$call)[2]), split = " ")), "\n")
+summary(summary(lm(estadisticas.modelos[2]$`SBC-both`, data_train))$coefficients[,4])
+summary(summary(lm(estadisticas.modelos[6]$`SBC-backward`, data_train))$coefficients[,4])
+
 # MODELO 3. Seleccion de variables aleatoria
 seleccion.aleatoria <- function(formInt, data_train, tipo){
   rep<-100
@@ -146,13 +152,29 @@ estadisticas.modelos.final.2
 # obtenidos en este modelo, sino que ademas la desviacion estandar en los valores de R2 es mas pequena
 
 #  MODELO FINAL
-formula.final <-  'varObjCont ~ CCAA + Age_19_65_pct + SameComAutonPtge + 
-    prop_missings + logxForeignersPtge + logxIndustryUnemploymentPtge + 
-    logxServicesUnemploymentPtge + logxtotalEmpresas + CCAA:SameComAutonPtge + 
-    CCAA:logxForeignersPtge'
-
+cor(Filter(is.numeric, input_cont)[c(3,4,6,7,9,10,12,22,26,27)], use="pairwise", method="pearson")
+modelEffectSizes(estadisticas.modelos[6]$`SBC-backward`)
+formula.final <-  'varObjCont ~ CCAA + Age_over65_pct + 
+    SameComAutonPtge + SameComAutonDiffProvPtge + IndustryUnemploymentPtge + 
+    ServicesUnemploymentPtge + logxConstructionUnemploymentPtge + CCAA:SameComAutonPtge + 
+    CCAA:SameComAutonDiffProvPtge'
 modelo.final <- lm(as.formula(formula.final), data = data_train)
-estadisticas.modelos.final[6,]
+nueva.desv <- validacion.cruzada(c(formula.final), "lm", data_train)
 mostrar.estadisticas(modelo.final, data_train, data_test, "lm", "varObjCont")
 summary(modelo.final)
 modelEffectSizes(modelo.final)
+
+# Conseguimos una maxima correlacion positiva de 0.32
+max(unique(c(cor(Filter(is.numeric, input_cont)[,c(4,6,7,9,10,26)], use="pairwise", method="pearson")))[-1])
+# Ademas de una correlacion minima de -0.38
+min(unique(c(cor(Filter(is.numeric, input_cont)[,c(4,6,7,9,10,26)], use="pairwise", method="pearson")))[-1])
+
+# ¿Y si volvemos a agrupar MA_CA_RI_CE_ME_MU_GA con AR_CM? Parece que empeora
+modelo.final.copia2 <- lm(as.formula(formula.final), data = data_train_copia)
+nueva.desv.copia <- validacion.cruzada(c(formula.final), "lm", data_train_copia)
+mostrar.estadisticas(modelo.final.copia2, data_train_copia, data_test_copia, "lm", "varObjCont")
+
+
+
+
+

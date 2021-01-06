@@ -30,15 +30,6 @@ input_bin_copia$CCAA <- recode(input_bin_copia$CCAA, "c('CV_EX_AS_BA_CA','MA_CA_
 data_train_copia.bin <- input_bin_copia[trainIndex.bin,]
 data_test_copia.bin <- input_bin_copia[-trainIndex.bin,]
 
-# MODELO 1 COPIA. Construyo el modelo con las categorias agrupadas
-modelo1.bin.copia<-glm(formInt.bin,data=data_train_copia.bin, family = binomial)
-mostrar.estadisticas(modelo1.bin.copia, data_train_copia.bin, data_test_copia.bin, "glm", "varObjBin")
-
-input_bin$CCAA <- recode(input_bin$CCAA, "c('CV_EX_AS_BA_CA','MA_CA_RI_CE_ME_MU_GA') = 'CV_EX_AS_BA_CA_MA_CA_RI_CE_ME_MU_GA_CM'")
-data_train.bin <- input_bin[trainIndex.bin,]
-data_test.bin <- input_bin[-trainIndex.bin,]
-modelo1.bin<-glm(formInt.bin,data=data_train.bin, family = binomial)
-
 # NOTA: Con el modelo 1.2 partimos en la seleccion de variables
 # MODELO 1.2. ¿Y si eliminamos las variables con menor importancia?
 importancia.var <- impVariablesLog(modelo1.bin, "varObjBin", data_train.bin)
@@ -47,8 +38,7 @@ importancia.var <- impVariablesLog(modelo1.bin, "varObjBin", data_train.bin)
 # de lo posibles aquellas variables que menos nos aporten a nuestro modelo, en especial de cara a la seleccion clasica. Por ello, de cara a las interacciones
 # nos quedaremos con aquellos cuya importancia este por encima del tercer cuartil (0.000855)
 summary(importancia.var$V5)
-variables.mas.imp <- importancia.var[which(importancia.var$V5 > 9.168e-04), "V2"]
-term.independientes <- unique(unlist(strsplit(variables.mas.imp, split = ":")))
+variables.mas.imp <- importancia.var[which(importancia.var$V5 > 1.29203), "V2"]
 formInt.bin <- paste0("varObjBin~",paste0(colnames(input_bin)[-1], collapse = "+"),"+",paste0(unlist(variables.mas.imp), collapse = "+"))
 
 modelo1.2.bin<-glm(formInt.bin,data=data_train.bin, family = binomial)
@@ -95,18 +85,6 @@ input_bin$varObjBin<-auxVarObj
 data_train.bin <- input_bin[trainIndex.bin,]
 data_test.bin <- input_bin[-trainIndex.bin,]
 
-
-auxVarObj<-input_bin$varObjBin
-input_bin$varObjBin<-make.names(input_bin$varObjBin)
-data_train.bin <- input_bin[trainIndex.bin,]
-data_test.bin <- input_bin[-trainIndex.bin,]
-estadisticas.modelos.final.bin <- validacion.cruzada.bin(c(estadisticas.modelos.bin[c(1,2,6)]), "glm", data_train.bin)
-estadisticas.modelos.final.bin
-input_bin$varObjBin<-auxVarObj
-data_train.bin <- input_bin[trainIndex.bin,]
-data_test.bin <- input_bin[-trainIndex.bin,]
-
-
 # SELECCION ALEATORIA
 # Para el modelo aleatorio, aunque pueda conllevar mas tiempo, lo ejecutamos con la formula original, es decir, incluyendo todas
 # las posibles variables y transformaciones
@@ -121,59 +99,80 @@ auxVarObj<-input_bin$varObjBin
 input_bin$varObjBin<-make.names(input_bin$varObjBin)
 data_train.bin <- input_bin[trainIndex.bin,]
 data_test.bin <- input_bin[-trainIndex.bin,]
-estadisticas.modelos.final.2.bin <- validacion.cruzada.bin(c(estadisticas.modelos.bin[c(2,6)], paste("varObjBin~", rownames(modelos.aleatorios))), "glm", data_train.bin)
+estadisticas.modelos.final.2.bin <- validacion.cruzada.bin(c(estadisticas.modelos.bin[6], paste("varObjBin~", rownames(modelos.aleatorios))), "glm", data_train.bin)
 estadisticas.modelos.final.2.bin
 input_bin$varObjBin<-auxVarObj
 data_train.bin <- input_bin[trainIndex.bin,]
 data_test.bin <- input_bin[-trainIndex.bin,]
 
-# ¿Que modelo es el mejor? ¿El segundo o el sexto de la seleccion clasica?
-# Finalmente, comparamos tanto el modelo 2 como el modelo 6 obtenidos en la seleccion clasica. Dado que el modelo 6 pesenta un elevado numero de variables,
-# eliminamos las menos significativas (mediante impVariablesLog), esto es, aquellas variables que aporten menos de 0.002 al R2: Population, PobChange_pct, SUPERFICIE,
-# Age_over65_pct y AgricultureUnemploymentPtge
-# MODELOS CANDIDATOS
-# Modelo 2
-formula.final.bin <- 'varObjBin ~ CCAA + ForeignersPtge + AgricultureUnemploymentPtge + 
-    prop_missings + Age_over65_pct + PobChange_pct + SUPERFICIE + 
-    Population + SameComAutonDiffProvPtge + CCAA:Population'
-modelo.final.bin <- glm(formula.final.bin, data_train.bin, family = binomial)
+# ¿Que modelo es el mejor? ¿El primero o el sexto de la seleccion clasica?
+# Para decantarnos por uno de los dos modelos comparemos el p-valor de cada uno
+# En el modelo 2, el 75 % de sus coeficientes presentan un p-valor de 0.001 o menos (3er cuartil),
+# mientras que en el modelo 6 solo el 50 % de las variables esta por debajo de 0.008
+# Comparamos ambos modelos
+cor(Filter(is.numeric, input_bin)[c(5,7,13,14,24,27)], use="complete.obs", method="pearson")
+impVariablesLog(estadisticas.modelos.bin[6]$`SBC-backward`, "varObjBin", data_train.bin)
+formula.final.bin.clasica <- 'varObjBin ~ CCAA + Age_over65_pct + ForeignersPtge + AgricultureUnemploymentPtge + IndustryUnemploymentPtge + ActividadPpal + prop_missings + ForeignersPtge:ActividadPpal + CCAA:IndustryUnemploymentPtge'
+modelo.final.bin.clasica <- glm(formula.final.bin.clasica, data_train.bin, family = binomial)
+mostrar.estadisticas(modelo.final.bin.clasica, data_train.bin, data_test.bin, "glm", "varObjBin")
 
-# Modelo 6 (modificado), eliminando las 5 variables menos significativas mencionadas anteriormente
-impVariablesLog(estadisticas.modelos.bin[6]$`SBC-backward`, "varObjBin", data_train.bin)[which(impVariablesLog(estadisticas.modelos.bin[6]$`SBC-backward`, "varObjBin", data_train.bin)$V5 < 0.002), ]
-formula.final.bin.2 <- 'varObjBin ~ CCAA + 
-    ForeignersPtge + SameComAutonPtge + SameComAutonDiffProvPtge + ActividadPpal + 
-    PersonasInmueble + prop_missings + CCAA:PersonasInmueble + 
-    CCAA:SameComAutonPtge + ForeignersPtge:ActividadPpal + CCAA:prop_missings + 
-    CCAA:SameComAutonDiffProvPtge'
+cor(Filter(is.numeric, input_bin)[c(5,7,13,24)], use="complete.obs", method="pearson")
+impVariablesLog(glm(paste0("varObjBin~",rownames(modelos.aleatorios)[1]), data_train.bin, family = binomial), "varObjBin", data_train.bin)
+formula.final.bin.aleatorio <- 'varObjBin ~ Age_over65_pct+AgricultureUnemploymentPtge+CCAA+Densidad+ForeignersPtge'
+modelo.final.bin.aleatorio <- glm(formula.final.bin.aleatorio, data_train.bin, family = binomial)
+mostrar.estadisticas(modelo.final.bin.aleatorio, data_train.bin, data_test.bin, "glm", "varObjBin")
 
-modelo.final.bin.2 <- glm(formula.final.bin.2, data_train.bin, family = binomial)
-# El modelo 6 no mejora tanto en el AIC como en el SBC
-mostrar.estadisticas(modelo.final.bin, data_train.bin, data_test.bin, "glm", "varObjBin")
-mostrar.estadisticas(modelo.final.bin.2, data_train.bin, data_test.bin, "glm", "varObjBin")
+summary(summary(modelo.final.bin.clasica)$coefficients[, 4])
+summary(summary(modelo.final.bin.aleatorio)$coefficients[, 4])
 
-# ¿Y las desviaciones tipicas?
-# Aunque el modelo 6 ve reducido su desviacion tipica, sigue sin aclarar cual es mejor modelo
+# ¿Y las nuevas medias y sd?
 auxVarObj<-input_bin$varObjBin
 input_bin$varObjBin<-make.names(input_bin$varObjBin)
 data_train.bin <- input_bin[trainIndex.bin,]
 data_test.bin <- input_bin[-trainIndex.bin,]
-estadisticas.modelos.final.3.bin <- validacion.cruzada.bin(c(formula.final.bin, formula.final.bin.2), "glm", data_train.bin)
-estadisticas.modelos.final.3.bin
+nuevas.medias.sd <- validacion.cruzada.bin(c(formula.final.bin.clasica, formula.final.bin.aleatorio), "glm", data_train.bin)
+nuevas.medias.sd$modelo <- c("Modelo 6 (modificado)", "Modelo 1 aleatorio (modificado)")
+nuevas.medias.sd
 input_bin$varObjBin<-auxVarObj
 data_train.bin <- input_bin[trainIndex.bin,]
 data_test.bin <- input_bin[-trainIndex.bin,]
 
-# Para decantarnos por uno de los dos modelos comparemos el p-valor de cada uno
-# En el modelo 2, el 75 % de sus coeficientes presentan un p-valor de 0.001 o menos (3er cuartil),
-# mientras que en el modelo 6 solo el 50 % de las variables esta por debajo de 0.008
-summary(summary(modelo.final.bin)$coefficients[, 4])
-summary(summary(modelo.final.bin.2)$coefficients[, 4])
+# ¿Podriamos juntar de nuevo la CCAA?
+mostrar.estadisticas(glm(formula.final.bin.aleatorio, data_train_copia.bin, family = binomial), data_train_copia.bin, data_test_copia.bin, "glm", "varObjBin")
 
-# MODELO GANADOR: Modelo 2 (Siguiendo el principio de parsimonia ademas de la importancia general de los coeficientes)
+interacciones <- tail(variables.mas.imp, 5)
+validaciones.cruzadas <- c()
+df <- data.frame("Interaccion" = c(), "AIC" = c(), "SBC" = c(), "Dif. PseudoR2" = c(), "sd" = c())
+for (interaccion in interacciones) {
+  formula.final.bin.aux <- paste0(formula.final.bin.aleatorio, "+", interaccion)
+  
+  modelo.final.bin.aux <- glm(formula.final.bin.aux, data_train.bin, family = binomial)
+  df <- rbind(df, c(interaccion, round(AIC(modelo.final.bin.aux), 2), round(BIC(modelo.final.bin.aux), 2), 
+                    pseudoR2(modelo.final.bin.aux,data_train.bin,'varObjBin') - pseudoR2(modelo.final.bin.aux,data_test.bin,'varObjBin')))
+  auxVarObj<-input_bin$varObjBin
+  input_bin$varObjBin<-make.names(input_bin$varObjBin)
+  data_train.bin <- input_bin[trainIndex.bin,]
+  data_test.bin <- input_bin[-trainIndex.bin,]
+  validaciones.cruzadas <- c(validaciones.cruzadas, unlist(validacion.cruzada.bin(formula.final.bin.aux, "glm", data_train.bin)$sd))
+  input_bin$varObjBin<-auxVarObj
+  data_train.bin <- input_bin[trainIndex.bin,]
+  data_test.bin <- input_bin[-trainIndex.bin,]
+}
+df <- cbind(df, validaciones.cruzadas)
+colnames(df) <- c("Interaccion", "AIC", "SBC", "Dif. PseudoR2", "sd")
+rm(validaciones.cruzadas); rm(formula.final.bin.aux); rm(modelo.final.bin.aux)
+df # No parece ser buena idea anadir interacciones
+
+# Conseguimos una maxima correlacion positiva de 0.11
+max(unique(c(cor(Filter(is.numeric, input_bin)[,c(5,7,13)], use="pairwise", method="pearson")))[-1])
+# Ademas de una correlacion minima de -0.29
+min(unique(c(cor(Filter(is.numeric, input_bin)[,c(5,7,13)], use="pairwise", method="pearson")))[-1])
+
+# MODELO GANADOR: Modelo 2 aleatorio (Siguiendo el principio de parsimonia ademas de la importancia general de los coeficientes)
 # BUSCAMOS EL MEJOR PUNTO DE CORTE
 ## Generamos una rejilla con los posibles puntos de corte
 posiblesCortes<-seq(0,1,0.01)
-rejilla<-data.frame(t(rbind(posiblesCortes,sapply(posiblesCortes,function(x) sensEspCorte(modelo.final.bin,data_test.bin,"varObjBin",x,"1")))))
+rejilla<-data.frame(t(rbind(posiblesCortes,sapply(posiblesCortes,function(x) sensEspCorte(modelo.final.bin.aleatorio,data_test.bin,"varObjBin",x,"1")))))
 rejilla$Youden<-rejilla$Sensitivity+rejilla$Specificity-1
 plot(rejilla$posiblesCortes,rejilla$Accuracy, col="red")
 points(rejilla$posiblesCortes,rejilla$Youden,col="blue")
@@ -183,19 +182,19 @@ cat("Max. Precision/Accuracy: ", rejilla$posiblesCortes[which.max(rejilla$Accura
 
 # Comparamos ambos puntos de corte
 # Indice Youden
-sensEspCorte(modelo.final.bin,data_test.bin,"varObjBin",0.57,"1")
+sensEspCorte(modelo.final.bin.aleatorio,data_test.bin,"varObjBin",0.59,"1")
 
 # Indice Precision/Accuracy
-sensEspCorte(modelo.final.bin,data_test.bin,"varObjBin",0.5,"1")
+sensEspCorte(modelo.final.bin.aleatorio,data_test.bin,"varObjBin",0.54,"1")
 
 # El indice de Youden no solo presenta un nivel de sensitividad alto (91 %) sino que ademas la tasa de especificidad o tasa de verdaderos negativos es mucho mejor
 # (70 % frente al 66 % del indice ACCURACY). Por tanto, con el objetivo de maximizar tanto la tasa de sensitividad como la tasa de especifidad elegimos el indice de Youden
-sensEspCorte(modelo.final.bin,data_train.bin,"varObjBin",0.57,"1")
-sensEspCorte(modelo.final.bin,data_test.bin,"varObjBin",0.57,"1")
+sensEspCorte(modelo.final.bin.aleatorio,data_train.bin,"varObjBin",0.59,"1")
+sensEspCorte(modelo.final.bin.aleatorio,data_test.bin,"varObjBin",0.59,"1")
 
 # Evaluacion del modelo final
-mostrar.estadisticas(modelo.final.bin, data_train.bin, data_test.bin, "glm", "varObjBin")
-summary(modelo.final.bin)
-roc(data_train.bin$varObjBin, predict(modelo.final.bin,data_train.bin,type = "response"))
-roc(data_test.bin$varObjBin, predict(modelo.final.bin,data_test.bin,type = "response"))
-impVariablesLog(modelo.final.bin, "varObjBin", data_train.bin)
+mostrar.estadisticas(modelo.final.bin.aleatorio, data_train.bin, data_test.bin, "glm", "varObjBin")
+summary(modelo.final.bin.aleatorio)
+roc(data_train.bin$varObjBin, predict(modelo.final.bin.aleatorio,data_train.bin,type = "response"))
+roc(data_test.bin$varObjBin, predict(modelo.final.bin.aleatorio,data_test.bin,type = "response"))
+impVariablesLog(modelo.final.bin.aleatorio, "varObjBin", data_train.bin)
