@@ -112,7 +112,6 @@ datos$CCAA <- recode(datos$CCAA, "c('Navarra', 'Andalucía') = 'AN_NA'; c('Catal
 c('ComValenciana', 'Extremadura', 'Asturias', 'Baleares', 'Canarias') = 'CV_EX_AS_BA_CA'; 
 c('Aragón', 'CastillaMancha') = 'AR_CM'; c('CastillaLeón') = 'AA_CL'; 
 c('Galicia', 'Cantabria', 'Madrid', 'Rioja', 'Ceuta', 'Melilla', 'Murcia') = 'MA_CA_RI_CE_ME_MU_GA';")
-
 # ¿Y ActividadPpal?
 estadisticas <- boxplot_targetbinaria(varObjCont,datos$ActividadPpal,"Actividad Principal")
 
@@ -125,22 +124,36 @@ datos$ActividadPpal <- recode(datos$ActividadPpal, "c('Construccion', 'Industria
 # 9. ¿Podemos eliminar alguna variable?
 corrplot(cor(Filter(is.numeric, datos[c(4,5,6,7,9,10,12,2,3,20:27)]), use="pairwise", method="pearson"), method = "circle",type = "upper", tl.cex = 0.5)
 par(mfrow = c(1,2))
-graficoVcramer(datos[,c(4,5,6,7,9,10,12,2,3,20:27)],varObjCont)
-graficoVcramer(datos[,c(4,5,6,7,9,10,12,2,3,20:27)],varObjBin)
+graficoVcramer(datos[,c(4,5,6,7,9,10,12,2,3,20:24,26:27)],varObjCont)
+graficoVcramer(datos[,c(4,5,6,7,9,10,12,2,3,20:24,26:27)],varObjBin)
 
-input_cont <- datos[, c(-6, -12)]
+input_cont <- datos[, c(-6, -12, -26)]
 input_bin <- datos[, c(-6, -12, -22)]
 
 # 10. Transformacion de variables
 input_cont<-data.frame(varObjCont,input_cont,Transf_Auto(Filter(is.numeric, input_cont),varObjCont))
 input_bin<-data.frame(varObjBin,input_bin,Transf_Auto(Filter(is.numeric, input_bin),varObjBin))
 
-correlaciones  <- round(abs(cor(Filter(is.numeric, input_cont), use="pairwise", method="pearson"))[1,30:57] - abs(cor(Filter(is.numeric, input_cont), use="pairwise", method="pearson"))[1,2:29], 2)
+corr.cont <- cor(Filter(is.numeric, input_cont), use="pairwise", method="pearson")[c(2:28), c(29:55)]
+vector.cont <- c()
+for(pos in seq(1:nrow(corr.cont))) {
+  vector.cont <- c(vector.cont, corr.cont[pos, pos])
+}
+summary(vector.cont)
+corr.bin <- cor(Filter(is.numeric, input_bin), use="pairwise", method="pearson")[c(1:27), c(28:54)]
+vector.bin <- c()
+for(pos in seq(1:nrow(corr.bin))) {
+  vector.bin <- c(vector.bin, corr.bin[pos, pos])
+}
+summary(vector.bin)
+
+
+correlaciones  <- round(abs(cor(Filter(is.numeric, input_cont), use="pairwise", method="pearson"))[1,29:55] - abs(cor(Filter(is.numeric, input_cont), use="pairwise", method="pearson"))[1,2:28], 2)
 summary(correlaciones)
 
 # Filtramos unicamente las transformadas que mejoren en mas de 0.1
 input_cont <- input_cont[, !colnames(input_cont) %in% names(correlaciones[correlaciones < 0.1])]
-input_cont <- input_cont[, c(-3,-4,-9,-12,-14,-15,-17,-19,-26)]
+input_cont <- input_cont[, c(-3,-4,-9,-12,-14,-15,-17,-19,-25)]
 # Todas las transformadas significativas emplean escalas logaritmicas
 names(correlaciones[correlaciones >= 0.1])
 

@@ -155,9 +155,8 @@ estadisticas.modelos.final.2
 cor(Filter(is.numeric, input_cont)[c(3,4,6,7,9,10,12,22,26,27)], use="pairwise", method="pearson")
 modelEffectSizes(estadisticas.modelos[6]$`SBC-backward`)
 formula.final <-  'varObjCont ~ CCAA + Age_over65_pct + 
-    SameComAutonPtge + SameComAutonDiffProvPtge + IndustryUnemploymentPtge + 
-    ServicesUnemploymentPtge + logxConstructionUnemploymentPtge + CCAA:SameComAutonPtge + 
-    CCAA:SameComAutonDiffProvPtge'
+    SameComAutonPtge + IndustryUnemploymentPtge + 
+    ServicesUnemploymentPtge + logxConstructionUnemploymentPtge + CCAA:SameComAutonPtge'
 modelo.final <- lm(as.formula(formula.final), data = data_train)
 nueva.desv <- validacion.cruzada(c(formula.final), "lm", data_train)
 mostrar.estadisticas(modelo.final, data_train, data_test, "lm", "varObjCont")

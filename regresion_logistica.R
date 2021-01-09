@@ -21,12 +21,8 @@ modelo1.bin<-glm(formInt.bin,data=data_train.bin, family = binomial)
 mostrar.estadisticas(modelo1.bin, data_train.bin, data_test.bin, "glm", "varObjBin") # Aun podemos mejorarlo muchisimo...
 
 input_bin_copia <- input_bin
-# ¿Hay alguna categoria que podamos agrupar? Para ello, recurrimos a la libreria scorecard, empleando la funcion
-# woebin que nos permite saber si hay alguna posible agrupacion que mejore el IV (Information Value)
-library(scorecard)
-salida.woe.ccaa <- woebin(data.frame(input_bin[, c("varObjBin", "CCAA")]), "varObjBin", print_step = 0)
-salida.woe.ccaa$CCAA$breaks
-input_bin_copia$CCAA <- recode(input_bin_copia$CCAA, "c('CV_EX_AS_BA_CA','MA_CA_RI_CE_ME_MU_GA') = 'CV_EX_AS_BA_CA_MA_CA_RI_CE_ME_MU_GA_CM'")
+# ¿Hay alguna categoria que podamos agrupar?
+input_bin_copia$CCAA <- recode(input_bin_copia$CCAA, "c('AR_CM','MA_CA_RI_CE_ME_MU_GA') = 'AR_CM_MA_CA_RI_CE_ME_MU_GA_CM'")
 data_train_copia.bin <- input_bin_copia[trainIndex.bin,]
 data_test_copia.bin <- input_bin_copia[-trainIndex.bin,]
 
@@ -72,7 +68,7 @@ validacion.cruzada.bin <- function(modelos, metodo, data_train) {
     total<-rbind(total,data.frame(roc=vcr$resample[,1],modelo=rep(paste("Modelo",i),
                                                                   nrow(vcr$resample))))
   }
-  bx <- boxplot(roc~modelo,data=total,main="R-Square")
+  bx <- boxplot(roc~modelo,data=total,main="Area bajo la curva ROC")
   print(bx$stats)
   data.frame(setNames(aggregate(roc~modelo, data = total, mean), c("modelo", "media")), sd = aggregate(roc~modelo, data = total, sd)[, 2])
 }
@@ -99,7 +95,7 @@ auxVarObj<-input_bin$varObjBin
 input_bin$varObjBin<-make.names(input_bin$varObjBin)
 data_train.bin <- input_bin[trainIndex.bin,]
 data_test.bin <- input_bin[-trainIndex.bin,]
-estadisticas.modelos.final.2.bin <- validacion.cruzada.bin(c(estadisticas.modelos.bin[6], paste("varObjBin~", rownames(modelos.aleatorios))), "glm", data_train.bin)
+estadisticas.modelos.final.2.bin <- validacion.cruzada.bin(c(estadisticas.modelos.bin[2], paste("varObjBin~", rownames(modelos.aleatorios))), "glm", data_train.bin)
 estadisticas.modelos.final.2.bin
 input_bin$varObjBin<-auxVarObj
 data_train.bin <- input_bin[trainIndex.bin,]
@@ -111,8 +107,8 @@ data_test.bin <- input_bin[-trainIndex.bin,]
 # mientras que en el modelo 6 solo el 50 % de las variables esta por debajo de 0.008
 # Comparamos ambos modelos
 cor(Filter(is.numeric, input_bin)[c(5,7,13,14,24,27)], use="complete.obs", method="pearson")
-impVariablesLog(estadisticas.modelos.bin[6]$`SBC-backward`, "varObjBin", data_train.bin)
-formula.final.bin.clasica <- 'varObjBin ~ CCAA + Age_over65_pct + ForeignersPtge + AgricultureUnemploymentPtge + IndustryUnemploymentPtge + ActividadPpal + prop_missings + ForeignersPtge:ActividadPpal + CCAA:IndustryUnemploymentPtge'
+impVariablesLog(estadisticas.modelos.bin[2]$`SBC-both`, "varObjBin", data_train.bin)
+formula.final.bin.clasica <- 'varObjBin ~ CCAA + ForeignersPtge + AgricultureUnemploymentPtge + prop_missings + Age_over65_pct + SUPERFICIE'
 modelo.final.bin.clasica <- glm(formula.final.bin.clasica, data_train.bin, family = binomial)
 mostrar.estadisticas(modelo.final.bin.clasica, data_train.bin, data_test.bin, "glm", "varObjBin")
 
@@ -131,7 +127,7 @@ input_bin$varObjBin<-make.names(input_bin$varObjBin)
 data_train.bin <- input_bin[trainIndex.bin,]
 data_test.bin <- input_bin[-trainIndex.bin,]
 nuevas.medias.sd <- validacion.cruzada.bin(c(formula.final.bin.clasica, formula.final.bin.aleatorio), "glm", data_train.bin)
-nuevas.medias.sd$modelo <- c("Modelo 6 (modificado)", "Modelo 1 aleatorio (modificado)")
+nuevas.medias.sd$modelo <- c("Modelo 2 (modificado)", "Modelo 1 aleatorio (modificado)")
 nuevas.medias.sd
 input_bin$varObjBin<-auxVarObj
 data_train.bin <- input_bin[trainIndex.bin,]
@@ -142,13 +138,13 @@ mostrar.estadisticas(glm(formula.final.bin.aleatorio, data_train_copia.bin, fami
 
 interacciones <- tail(variables.mas.imp, 5)
 validaciones.cruzadas <- c()
-df <- data.frame("Interaccion" = c(), "AIC" = c(), "SBC" = c(), "Dif. PseudoR2" = c(), "sd" = c())
+df <- data.frame("Interaccion" = c(), "AIC" = c(), "SBC" = c(), "PseudoR2 train" = c(), "PseudoR2 test" = c(), "sd" = c())
 for (interaccion in interacciones) {
   formula.final.bin.aux <- paste0(formula.final.bin.aleatorio, "+", interaccion)
   
   modelo.final.bin.aux <- glm(formula.final.bin.aux, data_train.bin, family = binomial)
   df <- rbind(df, c(interaccion, round(AIC(modelo.final.bin.aux), 2), round(BIC(modelo.final.bin.aux), 2), 
-                    pseudoR2(modelo.final.bin.aux,data_train.bin,'varObjBin') - pseudoR2(modelo.final.bin.aux,data_test.bin,'varObjBin')))
+                    pseudoR2(modelo.final.bin.aux,data_train.bin,'varObjBin'), pseudoR2(modelo.final.bin.aux,data_test.bin,'varObjBin')))
   auxVarObj<-input_bin$varObjBin
   input_bin$varObjBin<-make.names(input_bin$varObjBin)
   data_train.bin <- input_bin[trainIndex.bin,]
@@ -159,7 +155,7 @@ for (interaccion in interacciones) {
   data_test.bin <- input_bin[-trainIndex.bin,]
 }
 df <- cbind(df, validaciones.cruzadas)
-colnames(df) <- c("Interaccion", "AIC", "SBC", "Dif. PseudoR2", "sd")
+colnames(df) <- c("Interaccion", "AIC", "SBC", "PseudoR2 train", "PseudoR2 test", "sd")
 rm(validaciones.cruzadas); rm(formula.final.bin.aux); rm(modelo.final.bin.aux)
 df # No parece ser buena idea anadir interacciones
 

@@ -20,12 +20,20 @@ library(readxl)
 datos <- read_excel("DatosEleccionesEspaña.xlsx",sheet = 1)
 ```
 # 1. Depuración de los datos
-
 ## 1.1 Introducción al objetivo del problema y las variables implicadas
+El objetivo principal del problema consiste en __obtener un modelo tanto de regresión lineal como de regresión logística que permita calcular no solo el porcentaje de votos a la derecha en un municipio (Dcha_Pct), sino además predecir si en un municipio habrá una mayoría o no de votos a la derecha.__ Para ello, contamos con las siguientes columnas con la información de los municipios en España:
 
-El objetivo principal del problema consiste en __obtener un modelo tanto de regresión lineal como de regresión logística que permita calcular no solo el porcentaje de votos a la derecha en un municipio (Dcha_Pct), sino además predecir si en un municipio habrá una mayoría o no de votos a la derecha (maximizando tanto verdaderos positivos como negativos)__.
-
-Inicialmente (y una vez eliminadas el resto de variables objetivo) nos encontramos ante un conjunto de datos con la información demográfica de los diferentes municipios en España así como sus últimos resultados electorales. En primer lugar, y antes de analizar las variables independientes, debemos __recategorizar las variables cualitativas como factor__, dado que el formato establecido por defecto es numérico o cadena de caracteres. Según la documentación adjunta, existen un total de 4 variables categóricas, incluyendo la variable objetivo cualitativa: Derecha, CodigoProvincia, CCAA, ActividadPpal y Densidad, dado que contienen un número limitado de valores únicos:
+\footnotesize
+```
+["Name", "CodigoProvincia", "CCAA", "Population", "TotalCensus", "Dcha_Pct", "Derecha", "Age_0-4_Ptge", "Age_under19_Ptge",
+"Age_19_65_pct", "Age_over65_pct", "WomanPopulationPtge", "ForeignersPtge", "SameComAutonPtge", "SameComAutonDiffProvPtge",
+"DifComAutonPtge", "UnemployLess25_Ptge", "Unemploy25_40_Ptge", "UnemployMore40_Ptge", "AgricultureUnemploymentPtge",
+"IndustryUnemploymentPtge", "ConstructionUnemploymentPtge", "ServicesUnemploymentPtge", "totalEmpresas", "Industria",
+"Construccion", "ComercTTEHosteleria", "Servicios", "ActividadPpal", "inmuebles", "Pob2010", "SUPERFICIE", "Densidad",
+"PobChange_pct", "PersonasInmueble", "Explotaciones"] => Total variables: 36
+```
+\small
+En primer lugar, y una vez eliminadas el resto de variables objetivo, debemos __recategorizar las variables cualitativas como factor__, dado que el formato establecido por defecto es numérico o cadena de caracteres. Dado que contienen un número limitado de valores, existen un total de 4 variables categóricas, incluyendo la variable objetivo binaria: Derecha, CodigoProvincia, CCAA, ActividadPpal y Densidad:
 ```{r, echo=FALSE}
 datos <- datos[, -c(6,7,8,10,11)]
 ```
@@ -38,19 +46,19 @@ varObjCont <- datos$Dcha_Pct
 varObjBin <- datos$Derecha
 datos <- datos[, -c(6:7)]
 ```
-Por otro lado, podemos observar que los datos proporcionados contienen un total de 41 variables, de las cuales cabe destacar el campo identificador _Name_, un campo con el nombre de cada municipio:
+Por otro lado, podemos observar que los datos proporcionados __contienen un total de 34 variables independientes__, de las cuales cabe destacar el campo identificador _Name_, un campo con el nombre de cada municipio:
 
 ```{r, echo=FALSE}
-cat("Nombres de municipio unicos: ", length(unique(datos$Name)), " de ", nrow(datos), "filas. Numero columnas: ", ncol(datos) , "\n")
+cat("Nombres de municipio unicos: ", length(unique(datos$Name)), " de ", nrow(datos), "filas.\n")
 ```
 
-Salvo excepciones, en las que el nombre del municipio coincide, se trata de un campo que podríamos considerar como identificativo, por lo que no nos aportará información relevante al modelo y por ello lo eliminamos:
+Salvo excepciones, en las que el nombre del municipio coincide, se trata de un campo que podríamos considerar como identificativo, por lo que no nos aportará información relevante al modelo y por ello lo eliminamos.
 
-```{r}
+```{r,echo=FALSE}
 datos <- datos[, -c(1)] # Eliminamos el campo identificador
 ```
 
-Por otro lado, nos encontramos con el campo _CodigoProvincia_ que, a diferencia del anterior, el número de valores diferentes es significativamente menor (52 valores únicos). No obstante, nos encontramos ante la siguiente duda ¿Mantenemos el campo o lo eliminamos? Por un lado, recategorizarlo como una variable cualitativa puede llegar a entorpecer la elaboración del modelo, en especial si una o varias de las categorías no está lo suficientemente representada y deben ser agrupadas. Además, nos encontramos con un segundo problema: __el campo CCAA y CodigoProvincia están muy correlacionados según la V de Cramer__:
+Por otro lado, nos encontramos con el campo _CodigoProvincia_ que, a diferencia del anterior, el número de valores diferentes es significativamente menor (52 valores únicos). No obstante, nos encontramos ante la siguiente duda ¿Mantenemos el campo o lo eliminamos? Por un lado, recategorizarlo como una variable cualitativa puede llegar a entorpecer la elaboración del modelo, en especial si una o varias de las categorías no están lo suficientemente representadas y deben ser agrupadas. Además, nos encontramos con un segundo problema: __el campo CCAA y CodigoProvincia están muy correlacionados según la V de Cramer__:
 
 ```{r, warning=FALSE}
 sapply(datos[, c("CodigoProvincia")],function(x) Vcramer(x,datos$CCAA)) # Correlacion perfecta (1)
@@ -69,7 +77,7 @@ Como primeros resultados, la V de Cramer obtenida nos indica que el código de l
 cat("Categorias CodigoProvincia: ", length(levels(datos$CodigoProvincia)), "; CCAA: ", length(levels(datos$CCAA)), "\n")
 ```
 
-Es decir, con 52 - 19 = 33 categorías menos, la diferencia entre ambas relaciones es de apenas 0.011 en la variable objetivo binaria y de 0.018 en la variable objetivo continua, con muchas menos categorías, por lo que no parece ser tan necesario conocer de qué provincia proviene el municipio, sino que con la CCAA parece ser suficiente.  Por otro lado, muchas de las categorías en CódigoProvincia podrían estar muy poco representadas. A modo de ejemplo, de las 52 provincias, 18 de ellas tienen menos de 100 valores en el conjunto de datos, lo que podría suponer no solo recategorizarlas, sino además de ser un proceso computacionalmente más costoso de cara a la elaboración de los modelos (especialmente en la regresión logística):
+Es decir, con 33 categorías menos la diferencia entre ambas relaciones es de apenas 0.011 en la variable objetivo binaria y de 0.018 en la variable objetivo continua, con muchas menos categorías, por lo que no parece ser tan necesario conocer de qué provincia proviene el municipio, sino que con la CCAA parece ser suficiente.  Por otro lado, muchas de las categorías en CódigoProvincia podrían estar muy poco representadas. A modo de ejemplo, de las 52 provincias, 18 de ellas tienen menos de 100 valores en el conjunto de datos, lo que podría suponer no solo recategorizarlas, sino además de ser un proceso computacionalmente más costoso de cara a la elaboración de los modelos (especialmente en la regresión logística):
 
 ```{r}
 sum(freq(datos$CodigoProvincia)$`n` < 100)
@@ -92,7 +100,7 @@ datos <- datos[, -c(1)]
 corr.previa <- cor(datos[,unlist(lapply(datos, is.numeric))], use="complete.obs", method="pearson")
 ```
 
-## 1.2 Valores erróneos o no declarados
+## 1.5 Valores erróneos o no declarados
 
 A continuación, procedemos a eliminar aquellos valores no declarados en las variables, así como posibles valores fuera de rango:
 
@@ -106,7 +114,7 @@ summary(datos$ForeignersPtge)
 datos$ForeignersPtge<-replace(datos$ForeignersPtge, which(datos$ForeignersPtge < 0), NA)  # Min < 0
 ```
 
-2. Porcentajes de _SameComAutonPtge_ y _PobChange_pct_ superiores al 100 % (en el caso de _PobChange_pct_ según la documentación es posible la aparición de porcentajes negativos, pero no mayores a 100):
+2. Porcentajes de _SameComAutonPtge_ y _PobChange_pct_ superiores al 100 % (en el caso de _PobChange_pct_ según la documentación son posibles los porcentajes negativos, aunque no menciona los porcentajes mayores a 100):
 
 ```{r, echo=FALSE}
 summary(datos$SameComAutonPtge)
@@ -144,7 +152,7 @@ t(freq(datos$Densidad)) # Nos encontramos con una categoria desconocida "?"
 datos$Densidad<-recode.na(datos$Densidad,"?")
 ```
 
-## 1.3 Análisis de valores atípicos
+## 1.2 Análisis de valores atípicos
 Una vez corregidos los errores detectados, analicemos los valores atípicos más destacados empleando la función _describe_:
 
 ```{r, echo=FALSE}
@@ -165,29 +173,29 @@ En este caso, el maximo porcentaje corresponde con el campo _Servicios_, con un 
 summary(original)
 ```
 
-Si nos fijamos en el tercer cuartil, podemos comprobar que no todas las columnas presentan un alto porcentaje de atípicos. De hecho, el 75 % de las columnas no supera el 10 % de atípicos (menos 800 filas en un conjunto de datos de más de 8.000), por lo que dada la proporción podemos considerar dichos valores como atípicos, por lo que los recategorizamos como _missing_:
+Si nos fijamos en el tercer cuartil, podemos comprobar que no todas las columnas presentan un alto porcentaje de atípicos. De hecho, el 75 % de las columnas (26, aproximadamente) no supera el 10 % (menos de 800 filas en un conjunto de datos de más de 8.000), por lo que dada la proporción podemos considerar dichos valores como atípicos, recategorizándolos como _missing_:
 
 ```{r, echo=FALSE}
 datos[,(which(sapply(datos, class)=="numeric"))]<-sapply(datos[, c(which(sapply(datos, class)=="numeric"))],function(x) atipicosAmissing(x)[[1]])
 cat("Total valores missing: ", sum(is.na(datos)))
 ```
 
-## 1.4 Análisis de valores missings (NA). Imputaciones
-Tras recodificar los valores atípicos como ausentes, debemos analizar la proporción de valores atípicos tanto por observación como por variable. Para ello, obtenemos el valor máximo de _missings_ tanto por fila como por columna:
+## 1.3 Análisis de valores missings (NA). Imputaciones
+Tras recodificar los valores atípicos como ausentes, debemos analizar la proporción de valores atípicos tanto por observación como por variable. Para ello, obtenemos el valor máximo de _missings_ en ambos casos:
 
 ```{r, echo=FALSE}
 datos$prop_missings<-apply(is.na(datos[, ]),1,mean) * 100
-(prop_missingsVars<-max(apply(is.na(datos[, ]),2,mean) * 100))
+prop_missingsVars<-max(apply(is.na(datos[, ]),2,mean) * 100)
 data.frame("Por observacion" = max(datos$prop_missings), "Por variable" = round(prop_missingsVars, 2))
 ```
 
-Aparentemente, mientras que el porcentaje de _missings_ por variable es del 12.64 %, por observaciones detectamos un mayor número (37.5 %). No obstante, si empleamos la función _summary_:
+Aparentemente, mientras que el porcentaje de _missings_ por variable es del 12.64 %, por observaciones detectamos un mayor número (37.5 %). No obstante, si empleamos la función _summary_ en este último caso:
 
 ```{r, echo=FALSE}
 summary(datos$prop_missings)
 ```
 
-Vemos que el 75 % de las observaciones contienen aproximadamente un 3 % de valores _missings_ o menos, por lo que no parece tratarse de varias filas (de hecho, solo el 25 % presenta un porcentaje de _missings_ superior al 3 %, con una media muy pequeña en comparación con el valor máximo, lo que indica que se tratan de casos atípicos). Por otro lado, la pérdida de información en ambos casos no supera el 50 %, por lo que en lugar de eliminar las filas o columnas podemos imputarlos. No obstante, existen determinados campos que pueden ser imputados manualmente sin necesidad de emplear una media, mediana o de forma aleatoria: 
+Vemos que el 75 % de las observaciones contienen aproximadamente un 3 % de valores _missings_ o menos, por lo que no parece tratarse de varias filas (de hecho, solo el 25 % presenta un porcentaje de _missings_ superior al 3 %, con una media muy pequeña en comparación con el valor máximo, lo que indica que se tratan de observaciones atípicas). Por otro lado, la pérdida de información en ambos casos no supera el 50 %, por lo que en lugar de eliminar las filas o columnas podemos imputarlos. No obstante, existen determinados campos que pueden ser imputados manualmente sin necesidad de emplear una media, mediana o de forma aleatoria: 
 
 1. _Age_19_65_pct_, cuyo porcentaje de edad puede calcularse a partir de la suma de _Age_under19_Ptge_ y _Age_over65_pct_ menos el 100 %:
 
@@ -197,16 +205,25 @@ x["Age_19_65_pct"] <- 100 - (as.numeric(x["Age_under19_Ptge"]) + as.numeric(x["A
 ```
 
 ```{r, echo=FALSE}
-head(data.frame("Age_19_65_pct" = datos$Age_19_65_pct, "100-Age_under_19+Age_over65" = 100 - (datos$Age_under19_Ptge + datos$Age_over65_pct)), 5)
+head(data.frame("Age_19_65_pct" = datos$Age_19_65_pct, "100-Age_under_19+Age_over65" = 100 - (datos$Age_under19_Ptge + datos$Age_over65_pct)), 3)
+```
+
+De hecho, solo se han encontrado 4 municipios en los que el _100 - Age_under19_Ptge + Age_over65_pct_ no coincide, por lo que parece tratarse de posibles casos aislados en los que los porcentajes no son complementarios:
+
+```{r, eval=FALSE}
+sum(boxplot(abs((100 - (datos$Age_under19_Ptge + datos$Age_over65_pct)) - datos$Age_19_65_pct))$out > 1)
+```
+```{r, echo=FALSE}
+sum(boxplot(abs((100 - (datos$Age_under19_Ptge + datos$Age_over65_pct)) - datos$Age_19_65_pct), plot = FALSE)$out > 1)
 ```
 
 2. _totalEmpresas_ ¿Podría calcularse a partir de la suma del número de empresas de cada sector? _Industria_, _Construcción_, _ComercioTTEHostelería_ y _Servicios_. Una primera prueba para comprobar si el campo _totalEmpresas_ es la suma de cada columna podría ser analizando la matriz de correlación de valores _missings_: __Si falta cualquier sector, totalEmpresas tampoco debería aparecer al no poder calcularse__:
 
-```{r, echo=FALSE, fig.height=3, fig.width=4}
+```{r, echo=FALSE, fig.height=3, fig.width=3, fig.align='center'}
 corrplot(cor(is.na(datos[colnames(datos)[colSums(is.na(datos))>0]]))[c(1,2,13:19), c(1,2,13:19)],method = "ellipse",type = "upper", tl.cex = 0.5)
 ```
 
-Efectivamente, __detectamos una correlación entre los valores _missing_ de _totalEmpresas_ con cada sector__. De hecho, no solo existe correlación entre _totalEmpresas_, sino incluso entre cada sector. A modo de ejemplo, si el número de empresas dedicadas al comercio no aparece, el número de empresas dedicadas a la construcción tampoco. Incluso si la población no aparece, tampoco suelen aparecer el número de empresas, el censo total e incluso tampoco la población registrada en el año 2010 (No se tratan de valores _missing_ aleatorios, siguen un patrón, un posible indicio de colinealidad). Por tanto, el campo _totalEmpresas_ puede calcularse a partir de la suma de cada sector.
+Efectivamente, __detectamos una correlación entre los valores _missing_ de _totalEmpresas_ con cada sector__. De hecho, no solo existe correlación entre _totalEmpresas_, sino incluso entre cada sector. A modo de ejemplo, si el número de empresas dedicadas al comercio no aparece, el número de empresas dedicadas a la construcción tampoco. Incluso si la población no aparece, tampoco suelen aparecer el número de empresas, el censo total e incluso tampoco la población registrada en el año 2010 (no se tratan de valores _missing_ aleatorios, siguen un patrón de correlación). Por tanto, el campo _totalEmpresas_ puede calcularse a partir de la suma de cada sector.
 
 Como última prueba, realicemos una comprobación manual, sumando cada columna para comprobar si coincide con _totalEmpresas_:
 
@@ -219,7 +236,7 @@ x["totalEmpresas"] <- as.numeric(x["Industria"]) + as.numeric(x["Construccion"])
 table(data.frame("Coincide_Suma?" = ifelse(datos$Industria + datos$Construccion + datos$ComercTTEHosteleria + datos$Servicios == datos$totalEmpresas, "SI", "NO"), "ActividadPpal" = datos$ActividadPpal))
 ```
 
-Por lo general, cuando la actividad principal es _Otro_, la suma de cada columna no suele coincidir con _totalEmpresas_ (al ser predominante otro tipo de Actividad, el resto de columnas valen 0). No obstante, de los valores _missing_ de _totalEmpresas_, sólo existen 5 filas con la actividad principal a _Otro_, por lo que podemos realizar el cálculo manual sin problema alguno:
+Por lo general, cuando la actividad principal es _Otro_, la suma de cada columna no suele coincidir con _totalEmpresas_ (al ser predominante otro tipo de Actividad, el resto de columnas valen 0). No obstante, de los valores _missing_ de _totalEmpresas_, sólo existen 5 filas con la actividad principal a _Otro_, por lo que podemos realizar el cálculo manual sin afectar demasiado al conjunto de datos:
 
 ```{r, echo=FALSE}
 table(datos[is.na(datos$totalEmpresas), c("ActividadPpal")])
@@ -248,7 +265,17 @@ De nuevo, dado que existen valores _missing_ de _Population_ y _SUPERFICIE_, rea
 cat("Num. Missings Population:", sum(is.na(datos$Population)), "; SUPERFICIE:", sum(is.na(datos$SUPERFICIE)), "\n")
 ```
 
-Para el proceso de imputación en el resto de variables se ha dividido en un total de dos fases por el siguiente motivo: hay demasiados valores _missing_ consecutivos. Esto supone que, a la hora de realizar la imputación con valores aleatorios (mediante una interpolación) muchos de los valores _missing_ quedan sin imputarse, dado que muchos de ellos parecen ser consecutivos, lo que impide calcular su valor. Para ello, se realiza una primera imputación de forma aleatoria para, a continuación, imputar los valores restantes mediante la mediana (dado que muchos de los valores atípicos marcados a _missing_ presentaban una elevada desviación típica como pudimos comprobar anteriormente, lo que hace que la mediana sea mucho más representativa que la media):
+En relación con el resto de variables, debemos imputar sus valores. Dado que algunas de las variables presentan una elevada desviación típica, la media no parece ser la mejor alternativa, por lo que existen dos posibles opciones: mediante la mediana o de forma aleatoria junto con la mediana (dado que existen varios valores missing consecutivos, por lo que no es posible con una sola imputación). Para medir la calidad de ambas imputaciones, comparamos el porcentaje de correlación de los valores imputados con los valores iniciales almacenados en _corr.previa_:
+```{r, echo=FALSE}
+load("/Users/alberto/UCM/Mineria de Datos y Modelizacion Predictiva/Practica 1/test.RData")
+```
+\footnotesize
+```{r}
+sum(abs(comparacion.corr.mediana) < 0.2) * 100 / (dim(comparacion.corr.mediana)[1] * dim(comparacion.corr.mediana)[2])
+sum(abs(comparacion.corr.aleatorio) < 0.2) * 100 / (dim(comparacion.corr.aleatorio)[1] * dim(comparacion.corr.aleatorio)[2])
+```
+\small
+Podemos observar que aproximadamente __un 81.92 % de las correlaciones originales ha variado en menos de 0.2 con respecto a su correlación original al realizar una imputación aleatoria más mediana__, en comparación con un 80 % en el caso de la mediana. De esta forma, mediante la interpolación muchos de los valores _missings_ quedan imputados. En relación a los valores faltantes, no tendría sentido realizar nuevamente una imputación aleatoria, ya que estaríamos asociando nuevos valores a partir de otro conjunto de puntos previamente imputado ( _a grosso modo_, predecir a partir de una predicción). Por tanto, dada la menor variación que presenta en el porcentaje de correlación, __escogemos la imputación de forma aleatoria junto con la mediana__:
 
 ```{r, echo=FALSE}
 columnas <- c(2,3,8,9,10:12,13,16:19,21:24,26,27,28,30,31,32)
@@ -276,7 +303,7 @@ datos[,columnas] <- sapply(datos[, columnas],function(x) ImputacionCuant(x,"medi
 cat(sum(is.na(datos)), " valores missing tras la imputacion con la mediana\n")
 ```
 
-Como podemos observar, hemos conseguido reducir el porcentaje de _missings_. A continuación, si imputamos manualmente las tres columnas mencionadas anteriormente conseguimos reducir tanto el numero de _missing_ como el porcentaje máximo de atípicos:
+Como podemos observar, hemos conseguido reducir el porcentaje de _missings_. A continuación, si imputamos manualmente las tres columnas mencionadas anteriormente conseguimos reducir tanto el numero de _missings_ como el porcentaje máximo de atípicos:
 
 ```{r, echo=FALSE}
 edad.19.65 <- apply(datos,1,function(x) if(is.na(x["Age_19_65_pct"])) x["Age_19_65_pct"] <- 100 - (as.numeric(x["Age_under19_Ptge"]) + as.numeric(x["Age_over65_pct"])))
@@ -302,16 +329,6 @@ original.2 <- sapply(Filter(is.numeric, datos),function(x) atipicosAmissing(x)[[
 cat(sum(is.na(datos)), " valores missing. Columna con mayor % atipicos: ", original.2[which(original.2 == max(original.2))]  ,"\n")
 ```
 
-Tras la imputación final, veamos qué porcentaje de correlación se ha perdido comparando la correlación del conjunto de datos inicial con respecto al conjunto de datos depurado:
-
-```{r}
-corr.posterior <- cor(datos[,unlist(lapply(datos, is.numeric))], use = "complete.obs" , method="pearson")
-comparacion.corr <- corr.posterior[-30, -30] - corr.previa
-sum(abs(comparacion.corr) < 0.2) * 100 / (dim(comparacion.corr)[1] * dim(comparacion.corr)[2])
-```
-
-Podemos observar que aproximadamente __un 76 % de las correlaciones originales ha variado en menos de 0.2 con respecto a su correlación original__, bastante mayor con respecto a una imputación únicamente con la media o con la mediana. 
-
 Tras imputar las variables cuantitativas, debemos hacernos la siguiente pregunta. De las variables cualitativas ¿Podemos agrupar alguna de sus categorías? Salvo el campo _Densidad_, donde la frecuencia de cada categoría está repartida de forma equitativa:
 
 ```{r, echo=FALSE}
@@ -320,11 +337,11 @@ t(freq(datos$Densidad))
 
 Tanto en el campo _CCAA_ como _ActividadPpal_ debemos agrupar algunas de las categorías. Comenzando con las Comunidades Autónomas, disponemos de 19 valores diferentes, algunos de los cuales como Ceuta o Melilla con una única representación, tal y como se muestra a continuación (en la base de cada _boxplot_ se encuentra el número de ocurrencias de cada categoría):
 
-```{r, echo=FALSE, fig.height=4, fig.width=9}
+```{r, echo=FALSE, fig.height=5, fig.width=10}
 boxplot_targetbinaria(varObjCont,datos$CCAA,"CCAA")
 ```
 
-Para agrupar las Comunidades Autónomas, no solo agruparemos aquellas categorías con un menor número de variables sino además aquellas Comunidades __cuya amplitud en el diagrama de caja y bigotes sea similar__: __País Vasco y Cataluña__ (PV_CAT); __Navarra y Andalucía__ (AN_NA); __ComValenciana, Extremadura, Asturias, Baleares y Canarias__ (CV_EX_AS_BA_CA); __Aragón y Castilla la Mancha__; (AR_CM) así como __Galicia, Cantabria, Madrid, La Rioja, Ceuta, Melilla y Murcia'__ (MA_CA_RI_CE_ME_MU_GA). De este modo, no sólo conseguiremos concentrar auquellas CCAA con una distribución de votos similar, sino además reducir el número de categorías. En el caso de Castilla y León, dado que se trata de la CCAA con mayor número de observaciones, no la agruparemos con otra comunidad. No obstante, de cara a la creación de los modelos es importante tener en cuenta que se trata de la CCAA con la mayor distribución de votos hacia la derecha, además de ser la única categoría que no ha sido agrupada, por lo que lo consideraremos como la __categoría de referencia__, recodificando su nombre a _AA_CL_ (de esta manera la categoría será elegida como referencia por orden alfabético):
+Para agrupar las Comunidades Autónomas, no solo agruparemos aquellas categorías con un menor número de variables sino además aquellas Comunidades __cuya amplitud en el diagrama de caja y bigotes sea similar__: __País Vasco y Cataluña__ (PV_CAT); __Navarra y Andalucía__ (AN_NA); __ComValenciana, Extremadura, Asturias, Baleares y Canarias__ (CV_EX_AS_BA_CA); __Aragón y Castilla la Mancha__; (AR_CM) así como __Galicia, Cantabria, Madrid, La Rioja, Ceuta, Melilla y Murcia__ (MA_CA_RI_CE_ME_MU_GA). De este modo, no sólo conseguiremos concentrar auquellas CCAA con una distribución de votos similar, sino además reducir el número de categorías. En el caso de Castilla y León, dado que se trata de la CCAA con mayor número de observaciones, no la agruparemos con otra comunidad. No obstante, de cara a la creación de los modelos es importante tener en cuenta que se trata de la CCAA con la mayor distribución de votos hacia la derecha, además de ser la única categoría que no ha sido agrupada, por lo que lo consideraremos como la __categoría de referencia__, recodificando su nombre a _AA_CL_ (de esta manera la categoría será elegida como referencia por orden alfabético):
 
 ```{r, echo=FALSE}
 datos$CCAA <- recode(datos$CCAA, "c('Navarra', 'Andalucía') = 'AN_NA'; c('Cataluña', 'PaísVasco') = 'CAT_PV';
@@ -342,51 +359,70 @@ En contraposición, nos encontramos con el campo _ActividadPpal_:
 t(freq(datos$ActividadPpal))
 ```
 
-En este campo, las categorías _Construccion_ e _Industria_ apenas tienen 14 y 13 apariciones, respectivamente. Por ello, dado que solo hay que agrupar dos categorías con poca representación (a diferencia de las CCAA donde teníamos 19), lo agruparemos con la categoría con mayor representación: _Otro_, dado que la mediana en las tres categorías es muy similar:
+En este campo, las categorías _Construccion_ e _Industria_ apenas tienen 14 y 13 apariciones, respectivamente. Por ello, dado que solo hay que agrupar dos categorías con poca representación, los agruparemos con la categoría con mayor representación: _Otro_, dado que la mediana en las tres categorías es muy similar, en relación al porcentaje de votos:
 ```{r, echo=FALSE}
 estadisticas <- boxplot_targetbinaria(varObjCont,datos$ActividadPpal,"Actividad Principal")
 ```
-```{r}
-summary(estadisticas$data[estadisticas$data$target == "Otro", "variable"])
-summary(estadisticas$data[estadisticas$data$target == "Construccion", "variable"])
-summary(estadisticas$data[estadisticas$data$target == "Industria", "variable"])
+```{r, echo=FALSE}
+cat("Median (Otro): ", summary(estadisticas$data[estadisticas$data$target=="Otro", "variable"])[3], " ; Median (Construccion): ", summary(estadisticas$data[estadisticas$data$target=="Construccion", "variable"])[3], " ; Median (Industria): ", summary(estadisticas$data[estadisticas$data$target=="Industria", "variable"])[3])
 ```
 ```{r, echo=FALSE}
 datos$ActividadPpal <- recode(datos$ActividadPpal, 
                       "c('Construccion', 'Industria', 'Otro') = 'Construccion_Industria_Otro';")
 ```
 ## 1.4 Relaciones con las variables input y objetivo
-
 Una vez recategorizadas las variables, ¿Cómo están relacionadas las variables _input_ con las variables objetivo? O incluso algo más importante ¿Existe colinealidad entre las variables? Para responder a esta última pregunta, debemos analizar el siguiente subconjunto de la matriz de correlación:
 
-```{r, echo=FALSE, fig.height=3, fig.width=3}
+```{r, echo=FALSE, fig.height=3, fig.width=3, fig.align='center'}
 corrplot(cor(Filter(is.numeric, datos[c(4,5,6,7,9,10,12,2,3,20:27)]), use="pairwise", method="pearson"), method = "circle",type = "upper", tl.cex = 0.5)
 ```
 
-Analizando el gráfico, debemos destacar tres grandes grupos de correlación. En primer lugar, __las edades__, donde cada porcentaje puede llegar a obtenerse (como pudimos observar con _Age_19_65_pct_) a partir del resto de edades, es decir, __son complementarios__. Por otro lado, __el porcentaje de personas que residen en la misma o diferente CCAA__, e incluso entre dichos porcentaje y el porcentaje de extranejos. Como último bloque nos encontramos no solo con _totalEmpresas_ y el resto de sectores (dado que son campos complementarios), sino además con _Population_, _TotalCensus_, _inmuebles_ y _Pob2010_, campos en los que pudimos detectar una elevada correlación entre valores _missing_. Por tanto, ¿Debemos eliminar algún campo? La respuesta es si, pero con cierto cuidado ya que solo podemos eliminar uno de cada grupo complementario (si eliminamos más de uno no podríamos volver a calcularlo). Para analizar qué campos podemos o no eliminar, realicemos la V de Cramer para ambas variables objetivo:
+Analizando el gráfico, debemos destacar tres grandes grupos de correlación. En primer lugar, __las edades__, donde cada porcentaje puede llegar a obtenerse (como pudimos observar con _Age_19_65_pct_) a partir del resto de edades, es decir, __son complementarios__. Por otro lado, __el porcentaje de personas que residen en la misma o diferente CCAA__ (también complementarios), e incluso entre dichos porcentajes y el porcentaje de extranjeros. Como último bloque nos encontramos no solo con _totalEmpresas_ y el resto de sectores (dado que son campos complementarios), sino además con _Population_, _TotalCensus_, _inmuebles_ y _Pob2010_, campos en los que pudimos detectar una elevada correlación entre valores _missing_. Por tanto, ¿Debemos eliminar algún campo? La respuesta es si, pero con cierto cuidado ya que solo podemos eliminar uno de cada grupo complementario (si eliminamos más de uno no podríamos volver a calcularlo). Para analizar qué campos podemos o no eliminar, realicemos la V de Cramer para ambas variables objetivo:
 
 ```{r, echo=FALSE, fig.height=4, fig.width=8}
 par(mfrow = c(1,2))
-graficoVcramer(datos[,c(4,5,6,7,9,10,12,2,3,20:27)],varObjCont)
-graficoVcramer(datos[,c(4,5,6,7,9,10,12,2,3,20:27)],varObjBin)
+graficoVcramer(datos[,c(4,5,6,7,9,10,12,2,3,20:24,26:27)],varObjCont)
+graficoVcramer(datos[,c(4,5,6,7,9,10,12,2,3,20:24,26:27)],varObjBin)
 ```
 
-En ambas variables obejtivo, de los campos de edad podemos eliminar _Age_19_65_pct_ con menor correlación; del porcentaje de residencia en la misma o diferente CCAA podemos descartar _DifComAutonPtge_. Por último, ¿Qué podemos hacer con el bloque de _totalEmpresas_? En relación con la variable objetivo continua, la V de Cramer nos indica que __todos las variables correlacionadas presentan aproximadamente la misma importancia con respecto a la variable objetivo__, por lo que no podemos descartar ninguna hasta tener el modelo final (puede haber alguna variable que aumente su importancia más adelante o incluso mediante interacciones). No obstante, el número de inmuebles presenta una menor correlación con respecto al resto de campos, por lo que podemos eliminarla. En relación con la variable binaria, podríamos eliminar el campo _Construcción_, dado que su importancia es menor con respecto al resto, además de que podría calcularse a partir del resto de empresas, tal y como hicimos con la imputación manual de _totalEmpresas_. Con respecto al resto de campos, insisto, no podemos eliminarlos aún, dado que pueden resultar de utilidad de cara a ambos modelos.
+En ambas variables objetivo, de los campos de edad podemos eliminar _Age_19_65_pct_ con menor correlación; del porcentaje de residencia en la misma o diferente CCAA podemos descartar _DifComAutonPtge_, lo que permitiría reducir el coste computacional para ambos modelos (a modo de variables _dummy_).
+¿Qué podemos hacer con el bloque de _totalEmpresas_? Aunque debería eliminarse el menor número de variables posible, de cara a la regresión lineal y logística partiremos de un modelo general incluyendo todas las variables e interacciones, por lo que si mantenemos todos los campos, el proceso de obtención será computacionalmente más costoso, por lo que se ha tomado la decisión de eliminar (del bloque _totalEmpresas_) la variable con el menor valor VCramer: _inmuebles_ en el caso de la variable objetivo continua y _Construcción_ en el caso de la variable objetivo binaria. El resto de campos los mantenemos.
+
+__Como primer análisis, el estudio realizado hasta el momento por el conjunto de datos, así como los V Cramer obtenidos, lleva a la conclusión de que tanto la CCAA como los porcentajes de edad (especialmente mayores de 65 y menores de 19 años), así como el número de empresas en el municipio parecen ser las variables más decisivas en relación al número de votos a la derecha.__
 
 ```{r, echo=FALSE}
 input_cont <- datos[, c(-6, -12, -26)]
 input_bin <- datos[, c(-6, -12, -22)]
 ```
 
-## 1.5 Transformaciones de variables y relaciones con las variables objetivo
-Tras eliminar las variables menos relevantes, debemos realizar las trasnformaciones de las variables continuas con el objetivo de que el modelo de predicción funcione mejor o __pueda plasmar la verdadera relación con las variables objetivo__:
+## 1.6 Transformaciones de variables y relaciones con las variables objetivo
+Tras eliminar las variables menos relevantes, debemos realizar las transformaciones de las variables continuas con el objetivo de que el modelo de predicción funcione mejor o __pueda plasmar la verdadera relación con las variables objetivo__:
 
 ```{r}
 input_cont<-data.frame(varObjCont,input_cont,Transf_Auto(Filter(is.numeric, input_cont),varObjCont))
 input_bin<-data.frame(varObjBin,input_bin,Transf_Auto(Filter(is.numeric, input_bin),varObjBin))
 ```
 
-La cuestión es ¿todas las transformaciones son significativas? ¿Aportan mejoría a los modelos? Dado que computacionalmente sería muy costoso no solo trabajar con las variables originales, sino además con sus transformadas (especialmente en el modelo de regresión logística), __filtraremos únicamente aquellas transformadas que mejoren en gran medida a la variable original__. De hecho, no tendría mucho sentido mantener en un modelo tanto las variables originales como sus transformadas, por ejemplo _foreignersPtge_ y _logxForeignersPtge_ en el mismo modelo. Por ello, comenzando con la variable objetivo cuantitativa filtraremos aquellas transformaciones cuya correlación con respecto a la variable objetivo mejore en más de 0.1 con respecto a la variable original, dado que (como podemos observar en el tercer cuartil del siguiente _summary_), sólo un el 25 % de las variables originales ve mejorado su correlación en más de 0.1, por lo que en el resto de variables la mejoría es prácticamente nula:
+La cuestión es ¿todas las transformaciones son significativas? ¿Aportan mejoría a los modelos? Computacionalmente sería muy costoso no solo trabajar con las variables originales, sino además con sus transformadas de cara a un modelo de regresión, además de que __las variables originales y sus transformadas están muy correlacionadas__. A modo de ejemplo, en _input_cont_ la correlación minima entre una variable original y su transformada es de 0.57 y en _input_bin_ es prácticamente perfecta (1):
+```{r, echo=FALSE}
+corr.cont <- cor(Filter(is.numeric, input_cont), use="pairwise", method="pearson")[c(2:28), c(29:55)]
+vector.cont <- c()
+for(pos in seq(1:nrow(corr.cont))) {
+  vector.cont <- c(vector.cont, corr.cont[pos, pos])
+}
+corr.bin <- cor(Filter(is.numeric, input_bin), use="pairwise", method="pearson")[c(1:27), c(28:54)]
+vector.bin <- c()
+for(pos in seq(1:nrow(corr.bin))) {
+  vector.bin <- c(vector.bin, corr.bin[pos, pos])
+}
+```
+```
+              summary(vector.cont)                                summary(vector.bin)
+ Min.    1st Qu. Median  Mean    3rd Qu. Max.        Min.    1st Qu.  Median  Mean    3rd Qu. Max. 
+ 0.5708  0.7616  0.7989  0.8252  0.9578  1.0000      1       1        1       1       1       1
+```
+
+Por ello, comenzando con la variable objetivo cuantitativa filtraremos aquellas transformaciones cuya correlación con respecto a la variable objetivo mejore en más de 0.1 con respecto a la variable original, dado que (como podemos observar en el tercer cuartil del siguiente _summary_), sólo un 25 % de las variables originales ve mejorado su correlación en más de 0.1, por lo que en el resto de variables la mejoría es prácticamente nula:
 
 ```{r}
 correlaciones  <- round(abs(cor(Filter(is.numeric, input_cont), use="pairwise", method="pearson"))[1,29:55]                   - abs(cor(Filter(is.numeric, input_cont), use="pairwise", method="pearson"))[1,2:28], 2)
@@ -396,10 +432,12 @@ summary(correlaciones)
 input_cont <- input_cont[, !colnames(input_cont) %in% names(correlaciones[correlaciones < 0.1])]
 input_cont <- input_cont[, c(-3,-4,-9,-12,-14,-15,-17,-19,-25)]
 # Todas las transformadas significativas emplean escalas logaritmicas
-names(correlaciones[correlaciones >= 0.1])
+names(correlaciones[correlaciones >= 0.1]) # Corresponden con las variables con mayor desv. tipica 
 ```
 
-En relación con la variable objetivo binaria, para estudiar la importancia de las variables empleamos un criterio mucho más preciso que la V de Cramer: el criterio del __Valor de la Información__, una medida que permite analizar la influenza o poder predictivo que presenta una variable sobre otra dicotómica, por lo que cuanto mayor sea su valor de información o IV (generalmente a partir de 0.1), se dice que su poder predictivo es fuerte o influyente. En este caso, al igual que en la matriz de correlación restaremos los valores de información tanto de las variables transformadas como originales con el objetivo de analizar si la mejora es o no significativa:
+En relación con la variable objetivo binaria, para estudiar la importancia de las variables empleamos un criterio mucho más preciso que la V de Cramer: el criterio del __Valor de la Información__ [^1] , una medida que permite analizar la influencia o poder predictivo que presenta una variable sobre otra dicotómica, por lo que cuanto mayor sea su valor de información o IV (generalmente a partir de 0.1), se dice que su poder predictivo es fuerte o influyente. En este caso, al igual que en la matriz de correlación restaremos los valores de información tanto de las variables transformadas como originales con el objetivo de analizar si la mejora es o no significativa:
+
+[^1]: https://docs.tibco.com/pub/sfire-dsc/6.5.0/doc/html/TIB_sfire-dsc_user-guide/GUID-07A78308-525A-406F-8221-9281F4E9D7CF.html
 
 ```{r, echo=FALSE, include=FALSE}
 library(scorecard)
@@ -412,7 +450,7 @@ summary(sapply(salida.woe[c(31:57)], function(x) x$total_iv[1]) -
           sapply(salida.woe[c(2:21,23:25,27:30)], function(x) x$total_iv[1]))
 ```
 
-Como podemos observar a partir de la salida anterior, un 75 % las variables transformadas __ve mejorado su valor de información en 0.001 o menos__, e incluso empeora ligeramente en algunos casos. Por otro lado, el aporte máximo al valor de información ha sido 0.02, un valor muy poco significativo. Si a ello le añadimos que las transformadas son de tipo "x", es decir, su valor multiplicado por 1.0001 (funcionesRosa.R), descartamos por tanto las variables transformadas del modelo de regresión logístico:
+Como podemos observar a partir de la salida anterior, un 75 % de las variables transformadas __ve mejorado su valor de información en 0.001 o menos__, e incluso empeora ligeramente en algunos casos. Por otro lado, el aporte máximo al valor de información ha sido algo más de 0.01, un valor muy poco significativo. Si a ello le añadimos que las transformadas son de tipo "x", es decir, su valor multiplicado por 1.0001 (funcionesRosa.R), las descartamos del modelo de regresión logístico:
 
 ```{r}
 names(input_bin)[40:43] # Ejemplo del tipo de transformacion
@@ -432,7 +470,7 @@ load("/Users/alberto/UCM/Mineria de Datos y Modelizacion Predictiva/Practica 1/r
 
 # 2. Construcción del modelo de regresión lineal
 
-Comenzamos con el modelo de regresión lineal. Inicialmente, una vez divididos el conjunto de datos en entrenamiento y prueba (80 %, 20 % respectivamente), __realizaremos una primera regresión con todas y cada una de las variables del modelo, incluidas todas las posibles interacciones__. De este modo, aunque no sea el modelo definitivo podremos filtrar aquellas variables más relevantes de cara a facilitar el proceso de selección clásica en lugar de ejecutar directamente la selección con todos los posibles parámetros:
+Comenzamos con el modelo de regresión lineal. Inicialmente, una vez divididos el conjunto de datos en entrenamiento y prueba (80, 20 % respectivamente), __realizaremos una primera regresión con todas y cada una de las variables del modelo, incluidas todas las posibles interacciones__. De este modo, aunque no sea el modelo definitivo podremos filtrar aquellas variables más relevantes de cara a facilitar el proceso de selección clásica en lugar de ejecutar directamente la selección con todos los posibles parámetros:
 
 ```{r}
 formInt<-formulaInteracciones(input_cont,1)
@@ -441,14 +479,14 @@ modelo1<-lm(formInt,data=data_train)
 mostrar.estadisticas(modelo1, data_train, data_test, "lm", "varObjCont")
 ```
 
-Analizando las estadísticas obtenidas, observamos que el R2 obtenido en el conjunto de prueba es significativamente menor que en el conjunto de entrenamiento (diferencia de 0.06 entre ambos), lo que implica un claro sobreajuste en el modelo y, como consecuencia, __un exceso de parámetros__. Con el objetivo de mejorar el modelo, analicemos la importancia de cada una de las variables con respecto al modelo inicial, mediante la función _modelEffectSizes_:
+Analizando las estadísticas obtenidas, observamos que el R2 obtenido en el conjunto de prueba es significativamente menor que en el conjunto de entrenamiento (diferencia de 0.06 entre ambos), lo que implica un exceso de parámetros y, como consecuencia, __un claro sobreajuste en el modelo __. Con el objetivo de mejorar los resultados, analicemos la importancia de cada una de las variables con respecto al modelo inicial, mediante la función _modelEffectSizes_:
 
 ```{r}
 variacion.r2 <- modelEffectSizes(modelo1, Print = FALSE)
 summary(variacion.r2$Effects[, 4])
 ```
 
-Analizando la salida, debemos destacar el tercer cuartil: de todas las variables del modelo, __el 75 % aportan 0.0002 o menos al R2 final, un valor muy pequeño en comparación con otras variables donde el aporte es de 0.006 (valor máximo)__. Es decir, existe un contraste entre variables poco significativas y variables muy significativas. Por ello, analicemos las variables más atípicas, es decir, las que aportan mayormente al R2:
+De la salida anterior, debemos destacar el tercer cuartil: de todas las variables del modelo, __el 75 % provocarían una disminución en el R2 de 0.0002 o menos, un valor muy pequeño en comparación con otras variables donde la pérdida sería de 0.006 (valor máximo)__. Es decir, existe un contraste entre variables poco significativas y variables muy significativas. Por ello, dado que la diferencia entre el tercer cuartil y el valor máximo es muy alta, analicemos las variables más atípicas, es decir, las que aportan mayormente al R2:
 
 ```{r, eval=FALSE}
 variables.mas.imp <- names(boxplot(variacion.r2$Effects[, 4], plot = FALSE)$out)
@@ -466,8 +504,7 @@ mostrar.estadisticas(modelo1.2, data_train, data_test, "lm", "varObjCont")
 Reduciendo el número de parámetros de 304 a 99, el modelo mejora prácticamente en todos los sentidos, tanto un AIC como SBC más bajos, además de recortar la diferencia entre ambos R2 (mejorando en el caso del conjunto de prueba de 0.69 a 0.72). 
 
 ## 2.1 Selección de variables clásica
-
-No obstante, el modelo continua teniendo demasiados parámetros, por lo que realizamos una selección clásica empleando este último modelo, mediante los criterios AIC-both, SBC-both, AIC-forward, SBC-forward, AIC-backward y SBC-backward, devolviendo sus resultados en una tabla como sigue a continuación:
+No obstante, el modelo continua teniendo demasiados parámetros, por lo que realizamos una selección clásica empleando este último modelo, mediante los criterios AIC-both, SBC-both, AIC-forward, SBC-forward, AIC-backward y SBC-backward, devolviendo sus resultados en un _dataframe_ como sigue a continuación:
 
 ```{r, echo=FALSE}
 data.frame("R^2.train" = sapply(estadisticas.modelos, function(x) Rsq(x, "varObjCont", data_train)), 
@@ -477,23 +514,23 @@ data.frame("R^2.train" = sapply(estadisticas.modelos, function(x) Rsq(x, "varObj
            "N.Parametros" = sapply(estadisticas.modelos, function(x) length(coef(x))))
 ```
 
-Analizando la tabla resultante, dado su menor número de parámetros quisiera destacar tanto el modelo 2 como el modelo 6, ya que el resto no ha disminuido lo suficiente en cuanto al número de variables se refiere. En contraste, la diferencia entre el R2 train-test y su menor número de variables da una ligera ventaja al modelo 2, aunque el modelo 6 no solo mejora en cuanto a AIC se refiere, sino incluso que el criterio SBC (que penaliza el número de parámetros), da una mayor ventaja al modelo 6 (48.888 y 49.098). Para confirmar el mejor modelo clásico, realizamos una validación cruzada __con un total de 20 repeticiones, empleando 5 grupos__:
+Analizando la tabla resultante, dado su menor número de parámetros quisiera destacar tanto el modelo 2 como el modelo 6, ya que el resto no ha disminuido lo suficiente en cuanto al número de variables se refiere. En contraste, la diferencia entre el R2 train-test y su menor número de variables da una ligera ventaja al modelo 2, aunque el modelo 6 no solo mejora en cuanto a AIC se refiere, sino incluso que el criterio SBC (que penaliza el número de parámetros), da una mayor ventaja al modelo 6 (49098 frente a 49140). Para confirmar el mejor modelo clásico, realizamos una validación cruzada __con un total de 20 repeticiones, empleando 5 grupos__:
 
-```{r, echo=FALSE, out.width="90%", out.height="90%",fig.align="center",fig.cap="Validación cruzada en el modelo de selección clásica"}
+```{r, echo=FALSE, out.width="90%", out.height="90%",fig.align="center",fig.cap="Validación cruzada en los modelos de selección clásicos"}
 knitr::include_graphics("validacion_cruzada.png")
 ```
 
-Los resultados obtenidos en la validación cruzada arrojan tanto una menor desviación típica (0.0135 frente 0.0131) como una mayor media en el R2 del modelo 6 frente al modelo 2 (0.7256 frente 0.7259). De hecho, ¿Qué variables les diferencian?
+Los resultados obtenidos en la validación cruzada arrojan tanto una menor desviación típica (0.0131 frente 0.0135) como una mayor media en los valores R2 del modelo 6 frente al modelo 2 (0.7259 frente 0.7229). De hecho, ¿Qué variables les diferencian?
 
 ```{r, echo=FALSE}
-cat("¿Que tiene el modelo 2 que no tenga el modelo 6? \n", Reduce(setdiff, strsplit(c(as.character(estadisticas.modelos[2]$`SBC-both`$call)[2], 
+cat("¿Que parámetros tiene el modelo 2 que no tenga el modelo 6? \n", Reduce(setdiff, strsplit(c(as.character(estadisticas.modelos[2]$`SBC-both`$call)[2], 
                                                                                    as.character(estadisticas.modelos[6]$`SBC-backward`$call)[2]), split = " ")), "\n")
-cat("¿Que tiene el modelo 6 que no tenga el modelo 2? \n", Reduce(setdiff, strsplit(c(as.character(estadisticas.modelos[6]$`SBC-backward`$call)[2], 
+cat("¿Que parámetros tiene el modelo 6 que no tenga el modelo 2? \n", Reduce(setdiff, strsplit(c(as.character(estadisticas.modelos[6]$`SBC-backward`$call)[2], 
                                                                                    as.character(estadisticas.modelos[2]$`SBC-both`$call)[2]), split = " ")), "\n")
 
 ```
 
-A la vista de las variables obtenidas, empleando tanto las interacciones _CCAA:SameComAutonDiffProvPtge_ y  _Age_under19_Ptge:Densidad_ parece que el modelo mejora en comparación con las variables del modelo 2. Si observamos además el p-valor de cada modelo vemos que por lo general las variables del modelo 6 son más significativas que las del modelo 2, aún teniendo más variables:
+A la vista de las variables obtenidas, empleando tanto las interacciones _CCAA:SameComAutonDiffProvPtge_ y  _Age_under19_Ptge:Densidad_ parece que el modelo mejora en comparación con las variables del modelo 2, por lo que pueden resultar significativas. Si observamos además el p-valor de cada modelo vemos que por lo general las variables del modelo 6 son más significativas que las del modelo 2, aún teniendo tres variables adicionales:
 
 ```{r, echo=FALSE}
 cat("Modelo 2 (el 75 % de las variables tienen un p-valor de 0.005 o menos)\n")
@@ -502,56 +539,51 @@ cat("Modelo 6 (el 75 % de las variables tienen un p-valor de 0.001 o menos)\n")
 summary(summary(lm(estadisticas.modelos[6]$`SBC-backward`, data_train))$coefficients[,4])
 ```
 
-Por tanto, de cara a la selección aleatoria __compararemos los modelos obtenidos con el modelo clásico 6__, ya que obtiene un menor resultado en términos de "bondad media" y de criterio AIC/SBC.
+Por tanto, de cara a la selección aleatoria __compararemos los modelos obtenidos con el modelo clásico 6__, ya que obtiene un mejor resultado en términos de "bondad media" y de criterios AIC/SBC.
 
 ## 2.2 Selección de variables aleatoria
-
-Como última comparación, realizamos una selección aleatoria __a partir del 70 % de los datos de entrenamiento (por mayor velocidad)__, con el objetivo de comprobar si existe algún otro modelo que mejore el candidato obtenido en la selección clásica. En primer lugar, analizamos las estadísticas de los __tres mejores modelos aleatorios__:
+Como última comparación, realizamos una selección aleatoria __realizando 100 repeticiones a partir del 70 % de los datos de entrenamiento (por mayor velocidad)__, con el objetivo de comprobar si existe algún otro modelo que mejore el candidato obtenido en la selección clásica. En primer lugar, analizamos las estadísticas de los __tres mejores modelos aleatorios__:
 
 ```{r, echo=FALSE}
 cat("MODELOS ALEATORIOS\n")
 i <- 1
-for (x in rownames(modelos.aleatorios)) { cat("Modelo aleatorio ", i, "\n"); mostrar.estadisticas(lm(paste0('varObjCont~', x), data_train), data_train, data_test, "lm", "varObjCont"); i <- i +1 }
+for (x in rownames(modelos.aleatorios)) { cat("Modelo aleatorio ", i, ". Veces que se repite: " , modelos.aleatorios[x, "n"] , "\n"); mostrar.estadisticas(lm(paste0('varObjCont~', x), data_train), data_train, data_test, "lm", "varObjCont"); i <- i +1 }
 ```
 
-En primera instancia, pese a disminuir el número de parámetros, los modelos aleatorios __no mejoran en cuanto a AIC y SBC se refiere__, además de que el valor R2 disminuye ligeramente (de 0.72 en el modelo 6 a 0.71 en los modelos aleatorios) ¿Y en cuánto a la desviación típica?
+En primera instancia, pese a disminuir el número de parámetros, los modelos aleatorios __no mejoran en cuanto a AIC y SBC se refiere__, además de que el valor R2 disminuye ligeramente (de 0.72 en el modelo 6 a 0.71 en los modelos aleatorios). Además, el mejor de los modelos tan solo se repite en dos de las 100 repeticiones aleatorias ¿Y en cuánto a las medias y desviaciones típicas?
 
-```{r, echo=FALSE, out.width="90%", out.height="90%",fig.align="center",fig.cap="Modelo 6 (Modelo 1 en la imagen) + Validación cruzada en el modelo de selección aleatoria"}
+```{r, echo=FALSE, out.width="90%", out.height="90%",fig.align="center",fig.cap="Modelo 6 (Modelo 1 en la imagen) + Validación cruzada en los modelos de selección aleatorios"}
 knitr::include_graphics("validacion_cruzada_aleatorio.png")
 ```
 
 ## 2.3 Selección y justificación del modelo ganador
+Nuevamente, ninguno de los modelos aleatorios consigue mejorar al modelo 6 en términos de R2 medio y desviación típica, aunque bien es cierto que el segundo modelo aleatorio presenta una desviación típica muy similar (0.013), aunque con una media menor. Por tanto, de todos los modelos evaluados, __el modelo 6 ofrece un mejor resultado tanto en función del criterio AIC, SBC como en desviación típica__. Sin embargo, no podemos declarar el modelo 6 como ganador sin antes hacernos la siguiente pregunta: ¿Existe correlación en sus variables? Uno de los problemas que pudimos analizar en la fase de depuración fue la elevada correlación que presentan muchas de las variables, tanto las edades, el porcentaje de residencia en la misma CCAA como además del total de empresas. Por tanto, debemos eliminar todas aquellas variables, con menor importancia según la salida en _modelEffectSizes_, que presenten una correlación moderada-alta con el resto de parámetros (superior a 0.4 o inferior a -0.4):
 
-Nuevamente, ninguno de los modelos aleatorios consigue mejorar al modelo 6 en términos de media R2 y desviación típica, aunque bien es cierto que el segundo modelo aleatorio presenta una desviación típica muy similar (0.013), aunque con una media menor. Por tanto, de todos los modelos evaluados, __el modelo 6 ofrece un mejor resultado tanto en función del criterio AIC, SBC como en desviación típica__. Sin embargo, no podemos declarar el modelo 6 como ganador sin antes hacernos la siguiente pregunta: ¿Existe correlación en sus variables? Uno de los problemas que pudimos analizar en la fase de depuración fue la elevada correlación que presentan muchas de las variables, tanto las edades, el porcentaje de residencia en la misma CCAA como además del total de empresas. Por tanto, debemos eliminar todas aquellas variables, con menor importancia según la salida en _modelEffectSizes_, que presenten una moderada-alta correlación con el resto de parámetros (superior a 0.4 o inferior a -0.4):
-
-```{r, echo=FALSE, out.width="75%", out.height="75%",fig.align="center",fig.cap="Salida modelEffectSizes modelo 6 + Matriz de correlación"}
+```{r, echo=FALSE, out.width="90%", out.height="90%",fig.align="center",fig.cap="Salida modelEffectSizes modelo 6 + Matriz de correlación"}
 knitr::include_graphics("correlaciones_lm.png")
 ```
 
-1. _Age_under19_Ptge_ y _Age_over65_pct_: se ha decidido eliminar _Age_under19_Ptge_ (junto con _Age_under19_Ptge:Densidad_) dado que _Age_over65_pct_ aporta prácticamente el mismo R2 sin realizar una interacción entre ninguna variable (0.0029 en la columna _dR-sqr_)
+1. _Age_under19_Ptge_ y _Age_over65_pct_: se ha decidido eliminar _Age_under19_Ptge_ (junto con _Age_under19_Ptge:Densidad_) dado que _Age_over65_pct_ supondría perder prácticamente el mismo R2 sin realizar interacciones con ninguna variable (0.0029 en la columna _dR-sqr_)
 
-2. _Age_over65_pct_ con _logxtotalEmpresas_, _Construcción_ y _logxForeignersPtge_. En todos los casos anteriores, se elimiman el resto de campos debido a la menor pérdida en el R2 que supone (0.0029 frente a 0.0016, 0.0004 y 0.0009 en la columna _dR-sqr_)
+2. _Age_over65_pct_ con _logxtotalEmpresas_, _Construcción_ y _logxForeignersPtge_. En todos los casos anteriores, se eliminan el resto de campos debido a la menor pérdida en el R2 que supone (0.0029 frente a 0.0016, 0.0004 y 0.0009 en la columna _dR-sqr_)
 
-Una vez eliminadas las variables, comparamos los dos modelos (original y eliminando las variables con mayor correlación):
-
-```{r, echo=FALSE}
-cat("Modelo 6 original\n")
-mostrar.estadisticas(estadisticas.modelos[6]$`SBC-backward`, data_train, data_test, "lm", "varObjCont")
-cat("Modelo 6 modificado\n")
-mostrar.estadisticas(modelo.final, data_train, data_test, "lm", "varObjCont")
-```
-
-Pese a aumentar tanto el AIC como el criterio SBC, la diferencia entre ambos R2 se ha visto reducido ligeramente. Por otro lado, si revisamos la nueva desviación típica y la comparamos con la del modelo original, apenas se ha visto aumentado (de 0.0131 a 0.0134):
+Una vez eliminadas las variables, comparamos nuevamente los modelos (modelo 6 modificado como los modelos aleatorios):
 
 ```{r, echo=FALSE}
-cat("Modelo 6 original\n")
-estadisticas.modelos.final[6, ]
-cat("Modelo 6 modificado\n")
-nueva.desv$modelo <- c("Modelo 6 (modificado)")
-nueva.desv
+comparacion.df <- data.frame("R2-train" = c(0.7228378, 0.7156754, 0.7144549, 0.7140026), "R2-test" = c(0.7192497, 0.7113455, 0.7108354, 0.7111627), "AIC" =c(49013.76, 49185.49, 49209.32, 49219.6), "SBC" = c(49169.67, 49361.74, 49372.01, 49382.29), "Num. Parametros" = c(22, 25, 23, 23))
+rownames(comparacion.df) <- c("Modelo 6 (depurado)", "Modelo 1 aleatorio", "Modelo 2 aleatorio", "Modelo 3 aleatorio")
+comparacion.df
 ```
 
-Por otro lado, en relación con el modelo final nos encontramos con la interacción _CCAA:SameComAutonDiffProvPtge_ cuyo p-valor sólo es significativo en las regiones de Andalucía y Navarra:
+Pese a aumentar tanto el AIC como el criterio SBC, el modelo 6 continua siendo el mejor modelo tanto en términos R2 como incluso por los criterios AIC/SBC, __empleando menos variables que los modelos aleatorios__ ¿Y en relación con las medias y desviaciones típicas? 
+
+```{r, echo=FALSE}
+comparacion.df.sd.media <- data.frame("Media" = c(0.7206228, 0.7129467, 0.7122258, 0.7119924), "sd" = c(0.01349691, 0.01453005, 0.01389751, 0.01442047))
+rownames(comparacion.df.sd.media) <- c("Modelo 6 (depurado)", "Modelo 1 aleatorio", "Modelo 2 aleatorio", "Modelo 3 aleatorio")
+comparacion.df.sd.media
+```
+Nuevamente, apenas se ha visto afectado, por lo que continua teniendo mayor media y menor desviación. Por tanto, dado su menor número de parámetros (22), así como su mejor bondad de ajuste tanto en términos R2 medio como en desviación típica, __declaramos al modelo 6 depurado como modelo ganador__.
+Por otro lado, en relación con el modelo de regresión final nos encontramos con la interacción _CCAA:SameComAutonDiffProvPtge_ cuyo p-valor sólo es significativo en las regiones de Andalucía y Navarra:
 
 ```
 CCAAAN_NA:SameComAutonDiffProvPtge                 0.998386   0.119905   8.326  < 2e-16 ***
@@ -561,49 +593,43 @@ CCAACV_EX_AS_BA_CA:SameComAutonDiffProvPtge        0.290994   0.130041   2.238  
 CCAAMA_CA_RI_CE_ME_MU_GA:SameComAutonDiffProvPtge -0.214441   0.179183  -1.197   0.2314
 ```
 
-En este caso, una posibilidad sería reagrupar la CCAA con menor representación (MA_CA_RI_CE_ME_MU_GA) con AR_CM (la más parecida en cuanto a media), pero pese a ello la calidad del modelo (tanto en AIC como SBC) empeora significativamente:
+Dado que la interacción solo parece interactuar con una categoría en particular (Andalucía y Navarra) ¿Podríamos eliminar la interacción junto con el campo _SameComAutonDiffProvPtge_? Al hacerlo, el valor R2 en el conjunto de prueba no parece variar significativamente: tan solo disminuye en 0.03 eliminando 6 parámetros del modelo. De hecho, al realizar una nueva validación cruzada no solo disminuye la desviación típica, sino que además la media aumenta ligeramente (0.717 a 0.720), un indicativo de que la interacción no parece relevante. Por lo tanto lo eliminamos:
 
 ```
-Recategorizando CCAA => AIC: 49072.51 ; SBC:  49208.09 
-Sin recategorizar    => AIC: 49013.76 ; SBC:  49169.67
+Eliminando la interaccion => R2-test: 0.7162 ; media: 0.7206228 ; sd:  0.01349691 ; Num. Parámetros: 16
+Sin eliminar              => R2-test: 0.7192 ; media: 0.7176647 ; sd:  0.01371654 ; Num. Parámetros: 22
 ```
 
-Incluso podríamos eliminar directamente la interacción, de no ser por dos inconvenientes: en primer lugar, la interacción es muy significativa para una CCAA en concreto (AN_NA, con un p-valor muy pequeño), además de que eliminándolo obtendríamos un peor AIC y SBC, incluso mayor que en el caso anterior en el que sólo rectagorizamos la variable CCAA:
+Una vez eliminado, obtenemos las nuevas estadísticas del modelo final:
 
 ```
-Eliminando la interaccion => AIC: 49089.39 ; SBC:  49211.41 
-Sin eliminar              => AIC: 49013.76 ; SBC:  49169.67
+ESTADISTICAS DEL MODELO FINAL:
+Train:  0.7191562 ; Test:  0.716221 ; Dif. (Train-Test):  0.002935258 ; AIC: 49087.47 ; SBC:  49202.72 
+Numero de variables:  16 ; sd: 0.01371654
 ```
 
-Una última posibilidad sería sustituir dicha interacción por algunas de las importantes obtenidas en el primer modelo de regresión. Sin embargo, muchas de las interacciones emplean variables muy correlacionadas con las del modelo. A modo de ejemplo: _CCAA:Age_0.4_Ptge_ o _CCAA:CCAA:Age_under19_Ptge_ están muy correlacionadas con el campo _Age_over65_pct_. Con respecto al resto de interacciones, no aportan ninguna mejoría. Por tanto, una vez eliminadas las variables correlacionadas, analizamos la importancia de los parámetros mediante la función _summary_:
+De hecho, y siguiendo el principio de parsimonia, al eliminar la interacción menos relevante __obtenemos una explicación mucho más sencilla al porcentaje de votos__, con menos parámetros. A continuación, analizamos la importancia de las variables mediante la función _summary_:
 
-```{r, echo=FALSE, out.width="75%", out.height="75%",fig.align="center"}
+```{r, echo=FALSE, out.width="65%", out.height="65%",fig.align="center"}
 knitr::include_graphics("summary_lm.png")
 ```
 
-Analizando la función _summary_ salvo la interacción final, el resto de variables son prácticamente significativas. En relación con la última interacción, pese a que no todas las Comunidades Autónomas sean significativas, su importancia no deja de ser relevante. A modo de ejemplo, analicemos la salida obtenida en _modelEffectSizes_:
+Analizando la función _summary_, prácticamente todas las variables del modelo son significativas. Para un mayor detalle, analicemos la salida obtenida en _modelEffectSizes_:
 
 ```{r, echo=FALSE}
 modelEffectSizes(modelo.final)
 ```
 
-Pese a que solo se pierda una pequeña proporción de R2 (0.0037), quisiera remarcar el el campo _pEta-sqr_, el cual indica __la varianza de la variable objetivo explicada por cada variable del modelo__. De hecho, __las Comunidades Autónomas, el porcentaje de población superior a 65 años, el porcentaje de población que reside en la misma CCAA junto con el porcentaje de población que reside en una provincia diferente son las que mayor cantidad de varianza explican__, con más de un 1 % en cada una de ellas (incluso en el caso de _CCAA:SameComAutonPtge_ llegando a alcanzar más del 6 % de la varianza explicada). Por tanto, en el caso de _CCAA:SameComAutonDiffProvPtge_ no podemos eliminarlo pese a la menor importancia de las variables, ya que de lo contrario perderíamos porcentaje de variabilidad explicada (cerca del 1.3 %).
+Estudiando cada uno de los parámetros, nos encontramos con algunas variables con valores _dR-sqr_ muy pequeños. A modo de ejemplo, los campos _SameComAutonPtge_ o _Age_over_65_pct_ supondrían una pérdida de tan solo 0.0029 y 0.0034 en el R2, respectivamente. No obstante, quisiera remarcar la columna _pEta-sqr_, el cual indica el porcentaje de la varianza explicada por cada variable del modelo. De hecho, __las Comunidades Autónomas, el porcentaje de población superior a 65 años, asi como el porcentaje de población que reside en la misma CCAA__ son las que mayor cantidad de varianza explican, con más de un 1 % en cada una de ellas (incluso en el caso de _CCAA:SameComAutonPtge_ llegando a alcanzar más del 6 % de la varianza explicada). Por tanto, pese a que algunas de las variables supongan una pérdida poco significativa en el R2, suponen un mayor porcentaje de varianza explicada. Además, los p-valores obtenidos en cada uno de ellos indican que podemos rechazar la hipótesis nula de que los coeficientes no tienen efecto alguno sobre la variable objetivo.
 
-Como conclusión final, tras elegir el modelo 6 como modelo ganador en el proceso de selección, así como una vez eliminadas aquellas variables con elevada correlación, obtenemos un modelo bastante significativo en prácticamente todos sus parámetros, en el que hemos podido comprobar a lo largo del proceso final de depuración que __el porcentaje de votos a la derecha se ve influido principalmente por la CCAA del municipio, el porcentaje de habitantes mayores a 65 años e incluso en función del porcentaje de personas que residan en la misma CCAA (sea en la misma provincia o no), factores que en muchos de los casos se han visto potenciados al emplear interacciones con las Comunidades Autónomas__. Por tanto, una vez evaluado, declaramos el modelo 6 depurado como modelo ganador:
-
-```
-ESTADISTICAS DEL MODELO FINAL:
-Train:  0.7228378 ; Test:  0.7192497 ; Dif. (Train-Test):  0.003588082 ; AIC: 49013.76 ; SBC:  49169.67 
-Numero de variables:  22 ; sd: 0.01349691
-```
+Como conclusión final, obtenemos un modelo de regresión lineal significativo en prácticamente todos sus parámetros, en el que hemos podido comprobar a lo largo del proceso final de depuración que __el porcentaje de votos a la derecha se ve influido principalmente por la CCAA del municipio, el porcentaje de habitantes mayores a 65 años e incluso en función del porcentaje de personas que residen en la misma CCAA, pero especialmente con la interacción entre esta última y la CCAA__.
 
 ## 2.4 Interpretación de los coeficientes de dos variables
-
 Finalmente, interpretaremos los coeficientes de dos variables obtenidas en el modelo.
 
-1. __CCAACAT_PV__ (Cataluña y País Vasco): 19.22. Es decir, el porcentaje de votos a la derecha aumenta en un 19.22 % aproximadamente si la CCAA a la que pertenece el municipio es Cataluña o País Vasco con respecto a la Comunidad Autónoma de referencia (Castilla y León).
+1. __CCAACAT_PV__ (Cataluña y País Vasco): 19.10. Es decir, __el porcentaje de votos a la derecha aumenta en un 19.10 % aproximadamente si la CCAA a la que pertenece el municipio es Cataluña o País Vasco con respecto a la Comunidad Autónoma de referencia__ (Castilla y León).
 
-2. __logxConstructionUnemploymentPtge__: -0.25. Es decir, por cada incremento unitario en el porcentaje de desempleados en el sector de la construcción, el porcentaje de votos a la derecha se ve reducido en un 0.25 %. Por tanto, aquellos municipios con mayor porcentaje de paro en la construcción __afectarán negativamente al voto de la derecha__.
+2. __logxConstructionUnemploymentPtge__: -0.24. Es decir, __por cada incremento unitario en el porcentaje de desempleados en el sector de la construcción, el porcentaje de votos a la derecha se ve reducido en un 0.24 %__. Por tanto, aquellos municipios con mayor porcentaje de paro en la construcción __afectan negativamente al voto de la derecha__.
 
 # 3. Construcción del modelo de regresión logística
 ```{r, echo=FALSE}
@@ -618,7 +644,7 @@ modelo1.bin<-glm(formInt.bin,data=data_train.bin, family = binomial)
 mostrar.estadisticas(modelo1.bin, data_train.bin, data_test.bin, "glm", "varObjBin")
 ```
 
-Como podemos observar en la salida anterior, con un total de 304 parámetros el modelo no logra converger principalmente por un motivo: __existen demasiadas variables__, lo cual se traduce además en valores pseudo-R2 negativos, es decir, __la inclusión de demasiadas variables está penalizando la calidad del modelo__. Con respecto a las interacciones, debemos recoger únicamente aquellas con mayor relevancia. Por ello, ejecutamos la función _impVariablesLog_:
+Como podemos observar en la salida anterior, con un total de 304 parámetros el modelo no logra converger principalmente por un motivo: __existen demasiadas variables__, lo cual se traduce en valores pseudo-R2 negativos, es decir, __la inclusión de demasiadas variables está penalizando la calidad del modelo__. Con respecto a las interacciones, debemos recoger únicamente aquellas con mayor relevancia. Por ello, ejecutamos la función _impVariablesLog_:
 
 ```{r,eval=FALSE}
 importancia.var <- impVariablesLog(modelo1.bin, "varObjBin", data_train.bin)
@@ -627,17 +653,21 @@ importancia.var <- impVariablesLog(modelo1.bin, "varObjBin", data_train.bin)
 summary(importancia.var$V5)
 ```
 
-Analizando la salida obtenida en el _summary_ anterior, cabe destacar la mediana obtenida (-0.05), es decir, __un 50 % de las variables del modelo presentan una importancia negativa con respecto al modelo de regresión__, es decir, están penalizando las estimaciones obtenidas. Por el contrario, si nos fijamos en el tercer cuartil, un 25 % de las variables aportan la mayor importancia al modelo, __sobresalen__ con respecto al resto. Por tanto, de cara a un segundo modelo (además de reducir el coste computacional en la selección clásica), __filtramos aquellas variables cuya importancia sea mayor al tercer cuartil (1.29)__:
+Analizando la salida obtenida en el _summary_ anterior, cabe destacar la mediana obtenida (-0.05), es decir, __un 50 % de las variables del modelo presentan una importancia negativa con respecto al modelo de regresión__, es decir, están penalizando las estimaciones obtenidas en el pseudo-R2. Por el contrario, si nos fijamos en el tercer cuartil, un 25 % de las variables son las que aportan la mayor importancia al modelo, __sobresalen__ con respecto al resto. Por tanto, de cara a un segundo modelo, y con el fin de reducir el coste computacional en la selección clásica, __filtramos aquellas variables cuya importancia sea mayor al tercer cuartil (1.29)__. El resto de interacciones, que apenas tendrán efecto sobre el modelo las descartamos:
 
 ```{r, eval=FALSE}
 variables.mas.imp <- importancia.var[which(importancia.var$V5 > 1.29203), "V2"]
 # Ejemplo de algunas de las variables mas importantes (Top 5)
 ```
-```{r, echo=FALSE}
-tail(variables.mas.imp, 5)
+```
+## [1] "IndustryUnemploymentPtge:ActividadPpal", "Age_over65_pct:Densidad", "CCAA:ForeignersPtge"
+## [4] "CCAA:IndustryUnemploymentPtge", "Densidad:prop_missings"
+```
+```{r}
+length(variables.mas.imp)
 ```
 
-A primera vista, nos encontramos con que las variables más importantes corresponden con interacciones. A diferencia del modelo de regresión lineal, dichas interacciones no solo corrsponden con la Comunidad Autónoma, sino incluso con la Densidad o la Actividad Principal del municipio ¿Puede verse influido el voto a la Derecha por ambas variables categóricas en lugar de emplear únicamente la CCAA? Una vez recuperadas las interacciones más importantes, elaboramos un segundo modelo junto con las variables originales:
+A primera vista, nos encontramos con que las variables más importantes corresponden con interacciones (concretamente 21). A diferencia del modelo de regresión lineal, dichas interacciones no solo corresponden con la Comunidad Autónoma, sino incluso con la Densidad o la Actividad Principal del municipio, incluso variables que eran relevantes en el modelo lineal también lo son aquí (Age_over_65 o IndustryUnemploymentPtge). Una vez recuperadas las interacciones más importantes, elaboramos un segundo modelo junto con las variables originales:
 
 ```{r, echo=FALSE}
 formInt.bin <- paste0("varObjBin~",paste0(colnames(input_bin)[-1], collapse = "+"),"+",paste0(unlist(variables.mas.imp), collapse = "+"))
@@ -649,11 +679,10 @@ modelo1.2.bin<-glm(formInt.bin,data=data_train.bin, family = binomial)
 mostrar.estadisticas(modelo1.2.bin, data_train.bin, data_test.bin, "glm", "varObjBin")
 ```
 
-Como podemos observar, no solo hemos conseguido reducir el número de parámetros (de 304 a 100), sino además que los valores obtenidos tanto del conjunto de datos _train_ como _test_ se corresponden con valores comúnes en el pseudoR2 (del orden de 0.4); además de unos criterios AIC y SBC mucho menores, reduciendo de 99.295 a 4.990 en el caso de AIC, por ejemplo. 
+Como podemos observar, no solo hemos conseguido reducir el número de parámetros (de 304 a 100), sino además que los valores obtenidos tanto del conjunto de datos _train_ como _test_ se corresponden con valores comunes en el pseudoR2 (del orden de 0.4); además de unos criterios AIC y SBC mucho menores, reduciendo de 99.295 a 4.990 en el caso de AIC, por ejemplo. 
 
 ## 3.1 Selección de variables clásica
-
-No obstante, pese a que el modelo consigue converger, continúa teniendo demasiados parámetros. Por tanto, partiendo de este último modelo realizamos una selección clásica del mismo modo que en la regresión lineal: empleando los criterios AIC-both, SBC-both, AIC-forward, SBC-forward, AIC-backward y SBC-backward, devolviendo sus resultados en una tabla.
+No obstante, pese a que el modelo consigue converger, continúa teniendo demasiados parámetros. Por tanto, partiendo de este último modelo realizamos una selección clásica del mismo modo que en la regresión lineal: empleando los criterios AIC-both, SBC-both, AIC-forward, SBC-forward, AIC-backward y SBC-backward, devolviendo sus resultados en un _dataframe_:
 
 ```{r, echo=FALSE}
 data.frame("R^2.train" = sapply(estadisticas.modelos.bin, function(x) pseudoR2(x, data_train.bin, "varObjBin")), 
@@ -663,13 +692,17 @@ data.frame("R^2.train" = sapply(estadisticas.modelos.bin, function(x) pseudoR2(x
            "N.Parametros" = sapply(estadisticas.modelos.bin, function(x) x$rank))
 ```
 
-Analizando los resultados obtenidos en la selección clásica, los modelos 1 y 5 (AIC-both y AIC-backward) presentan un criterio AIC menor, aunque con un elevado número de parámetros, especialmente en el quinto modelo, donde incluso hay una mayor diferencia entre ambos pseudo-R2. Por el contrario, los modelos 2 y 6 (SBC-both y SBC-backward) ofrecen un menor número de variables, además de un valor SBC significativamente menor (5195 y 5185, respectivamente). Por tanto, pese al menor valor pseudo-R2 que presentan, los modelos 2 y 6 ofrecen unos resultados muy similares a los modelos 1 y 5, con una diferencia de tan solo 0.01 en el R2, empleando tan solo 12 y 21 parámetros, respectivamente. Por tanto, __todo apunta a los modelos 2 y 6 como posibles modelos candidatos__. Sin embargo, llama la atención la diferencia negativa entre los valores _train_ y _test_ del modelo 2. Por lo general, en cualquier modelo de aprendizaje automático el conjunto de datos de entrenamiento obtiene un mejor resultado en comparación con los datos de prueba. No obstante, puede ocurrir que los resultados en la validación/prueba sean ligeramente superiores a los datos de entrenamiento, en función del modo en el que se hayan dividido los datos (valor de la semilla). Dado que la partición ha sido aleatoria, puede ocurrir que el conjunto de entrenamiento sea más difícil de interpretar que los datos de validación, obteniendo resultados confusos. Por tanto, con los criterios AIC/SBC no resultan suficientes para decidir cual es el mejor modelo clásico, por lo que realizamos una __validación cruzada del mismo modo que en la regresión lineal__. De este forma podremos comprobar si los resultados son independientes en función de la partición de los datos: __si la desviación típica en los valores ROC es baja, significaría que la partición empleada en la selección clásica no sería la más adecuada. En caso contrario, podría tratarse de un posible sobreajuste en el modelo 2__:
+Analizando los resultados obtenidos en la selección clásica, __los modelos 1 y 5 (AIC-both y AIC-backward) presentan un criterio AIC menor__, aunque con un elevado número de parámetros, especialmente en el quinto modelo, donde incluso hay una mayor diferencia entre ambos pseudo-R2 (0.01). Por el contrario, los modelos 2 y 6 (SBC-both y SBC-backward) ofrecen un menor número de variables, además de un valor SBC significativamente menor (5195 y 5185, respectivamente). Por tanto, pese al menor valor pseudo-R2 que presentan, los modelos 2 y 6 ofrecen unos resultados muy similares a los modelos 1 y 5, con una diferencia de tan solo 0.01 en el R2, empleando tan solo 12 y 21 parámetros, respectivamente. Por tanto, __todo apunta a los modelos 2 y 6 como posibles modelos candidatos__, con valores pseudoR2 muy similares, además de ser los modelos con menor número de parámetros. Sin embargo, llama la atención la diferencia negativa entre los valores _train_ y _test_ del modelo 2. 
 
-```{r, echo=FALSE, out.width="90%", out.height="90%",fig.align="center",fig.cap="Validación cruzada en el modelo de selección aleatoria"}
+Por lo general, en cualquier modelo de aprendizaje automático el conjunto de datos de entrenamiento obtiene un mejor resultado en comparación con los datos de prueba. No obstante, puede ocurrir que los resultados en la validación/prueba sean ligeramente superiores a los datos de entrenamiento, en función del modo en el que se hayan dividido los datos (valor de la semilla). Dado que la partición ha sido aleatoria, puede ocurrir que el conjunto de entrenamiento sea más difícil de interpretar que los datos de prueba, obteniendo resultados confusos. 
+
+Por tanto, con los criterios AIC/SBC no resultan suficientes para decidir cual es el mejor modelo clásico, por lo que realizamos una __validación cruzada del mismo modo que en la regresión lineal__. De este modo podremos comprobar si los resultados son independientes en función de la partición de los datos: __si la desviación típica en los valores ROC es baja, significaría que la partición empleada en la selección clásica no sería la más adecuada. En caso contrario, podría tratarse de un posible sobreajuste en el modelo 2__:
+
+```{r, echo=FALSE, out.width="90%", out.height="90%",fig.align="center",fig.cap="Validación cruzada en los modelos de selección clásicos"}
 knitr::include_graphics("validacion_cruzada_logistica.png")
 ```
 
-Analizando tanto la tabla como los diagramas de caja, observamos que la desviación típica en el modelo 2 no es muy significativa, por lo que puede que la división empleada en la selección clásica no haya sido la más adecuada. Por lo general, tanto la media como las desviaciones típicas obtenidas son muy similares, con mejor resultado en los modelos 1, 3 y 5, además de una mejor bondad media en el valor ROC. No obstante, tanto el criterio SBC como el menor número de parámetros nos lleva a elegir los modelos 2 y 6. Como última comparación, analizamos el promedio de los p-valores obtenidos en cada modelo:
+Analizando tanto la tabla como los diagramas de caja, observamos que la desviación típica en el modelo 2 no es muy significativa (0.008), por lo que puede que la división empleada en la selección clásica no haya sido la más adecuada. Por lo general, tanto la media como las desviaciones típicas obtenidas son muy similares, con mejor resultado en los modelos 1, 3 y 5 (del orden de 0.007), además de una mejor bondad media en el valor ROC (del orden de 0.88). No obstante, tanto el criterio SBC como el menor número de parámetros nos lleva a elegir los modelos 2 y 6, donde la bondad media es muy similar además de la amplitud del diagrama de caja y bigotes. Como última comparación, analizamos el promedio de los p-valores obtenidos en cada modelo:
 
 ```{r, echo=FALSE}
 i <- 1
@@ -681,93 +714,78 @@ for(modelo in estadisticas.modelos.bin[c(1,2,3,5,6)]) {
 }
 ```
 
-Pese a tener mejores medias y desviaciones típicas, __muchas de las variables en los modelos 1, 3 y 5 no son significativas__. A modo de ejemplo, la mediana en cada uno de ellos indica que un 50 % de los coeficientes no disminuye su p-valor de 0.05 (poca significancia), por lo que los descartamos. Como comparación final, el modelo 6 ha demostrado tener, en la validación cruzada, una media superior al modelo 2 (0.88 frente a 0.87). En relación a los p-valores, bien es cierto que la mayoría de las variables del segundo modelo son más relevantes (tercer cuartil = 8e-05 frente a 0.021 del modelo 6). No obstante, de cara a una comparación con los modelos aleatorios __emplearemos el modelo 6__, ya que es posible que algunas de las variables sean poco significativas o estén correlacionadas entre sí, por lo que podremos eliminar dichos parámetros y decantarnos por un modelo definitivo. 
+Pese a tener mejores medias y desviaciones típicas, __muchas de las variables en los modelos 1, 3 y 5 no son significativas__. A modo de ejemplo, la mediana en cada uno de ellos indica que un 50 % de los coeficientes no disminuye su p-valor de 0.05 (poca significancia), por lo que los descartamos. En relación con el modelo 6, ha demostrado tener, en la validación cruzada, una media superior al modelo 2 (0.88 frente a 0.87). No obstante, la diferencia entre ambos es muy pequeña. A modo de ejemplo, añadiendo 9 parámetros más, el modelo 6 solo consigue una mejora en el pseudoR2 (test) de tan solo 0.02, además de una diferencia en el AUC de 0.01. Por otro lado, si nos fijamos en la siguiente salida, __mientras que el modelo 6 emplea interacciones, el modelo 2 obtiene unos resultados similares sin emplear ninguna interaccion__:
+
+\footnotesize
+```{r, echo=FALSE}
+cat("Modelo 6: CCAA + Age_over65_pct + ForeignersPtge + AgricultureUnemploymentPtge + IndustryUnemploymentPtge + \n ActividadPpal + PobChange_pct + prop_missings + ForeignersPtge:ActividadPpal + CCAA:IndustryUnemploymentPtge\n")
+
+cat("Modelo 2: CCAA + ForeignersPtge + AgricultureUnemploymentPtge + prop_missings + Age_over65_pct + PobChange_pct + SUPERFICIE\n")
+```
+\small
+
+Además, en cuanto a los p-valores, las variables del segundo modelo son mucho más relevantes que en el sexto (tercer cuartil = 8e-05 frente a 0.021), es decir, __las variables del modelo 2 son generalmente más significativas que las del modelo 6__. Por tanto, de cara a una comparación final con los modelos aleatorios, dado el buen valor pseudoR2 y ROC obtenido en proporción con un menor número de parámetros __escogemos como modelo candidato al modelo 2__.
 
 ## 3.2 Selección de variables aleatoria
-
 Una vez realizada la selección clásica, elaboramos los modelos aleatorios a partir de la combinación de __todas las variables y sus interacciones__, un proceso computacionalmente más costoso pero que permite comprobar si hemos omitido alguna interacción relevante en los primeros pasos:
 
 ```{r, echo=FALSE}
-cat("MODELO 6 CLASICO \n")
-mostrar.estadisticas(estadisticas.modelos.bin[6]$`SBC-backward`, data_train.bin, data_test.bin, "glm", "varObjBin")
+cat("MODELO 2 CLASICO \n")
+mostrar.estadisticas(estadisticas.modelos.bin[2]$`SBC-both`, data_train.bin, data_test.bin, "glm", "varObjBin")
 cat("MODELOS ALEATORIOS (TOP 3)\n")
 i <- 1
-for (x in rownames(modelos.aleatorios)) { cat("Modelo aleatorio ", i, "\n"); mostrar.estadisticas(glm(paste0('varObjBin~', x), data_train.bin, family = binomial), data_train.bin, data_test.bin, "glm", "varObjBin"); i <- i +1 }
+for (x in rownames(modelos.aleatorios)) { cat("Modelo aleatorio ", i, ". Veces que se repite: " , modelos.aleatorios[x, "n"] , "\n"); mostrar.estadisticas(glm(paste0('varObjBin~', x), data_train.bin, family = binomial), data_train.bin, data_test.bin, "glm", "varObjBin"); i <- i +1 }
 ```
 
 ## 3.3 Selección y justificación del modelo ganador
+Analizando el top 3 modelos aleatorios, __llama la atención el primer modelo más repetido (en 5 ocasiones)__, con el mismo número de variables que el modelo 2, aunque con unos valores pseudo-R2 muy similares entre el train y test (0.40 en ambos). No obstante, a simple vista no parece estar claro cual puede ser el modelo ganador, pero si realizamos la validación cruzada:
 
-Analizando el top 3 modelos aleatorios, llama la atención el primer modelo, con muchos menos parámetros que el modelo 6, aunque con valores AIC y SBC ligeramente superiores y un pseudo-R2 menor. No obstante, si analizamos las desviaciones típicas:
-
-```{r, echo=FALSE, out.width="85%", out.height="80%",fig.align="center",fig.cap="Validación cruzada modelo 6 + modelos de selección aleatoria"}
+```{r, echo=FALSE, out.width="95%", out.height="95%",fig.align="center",fig.cap="Validación cruzada modelo 6 + modelos de selección aleatorios"}
 knitr::include_graphics("validacion_cruzada_logistica_aleatoria.png")
 ```
 
-En ambos casos, tanto los valores medios de la curva ROC como la desviación típica son muy similares, con una mayor ventaja en el modelo 6 (modelo 1 en la imagen). No obstante, el menor número de parámetros aporta cierta ventaja al modelo 1 aleatorio (modelo 2 en la imagen). Como última prueba, dado que en ambos modelos se encuentran los campos _Age_over65_pct_ y _PobChange_pct_, en función del grado de importancia eliminamos una u otra de ambos modelos, comparando de nuevo los resultados finales (en ambos casos eliminamos _PobChange_pct_ dada su menor importancia):
-
+En ambos casos, tanto los valores medios de la curva ROC como la desviación típica son muy similares (bondad media muy parecida, en torno a 0.87), aunque con una ligera ventaja, de tan solo unas milésimas en el modelo 1 aleatorio (modelo 2 en la imagen) tanto en media como en desviación típica. Como última prueba, en ambos modelos se han encontrado los campos _Age_over65_pct_ y _PobChange_pct_, variables con alta correlación (-0.52), por lo que realizamos una comparación final eliminando una de las variables en cada modelo (la de menor importancia según la salida en _impVariablesLog_, concretamente _PobChange_pct_):
 ```{r, eval=FALSE}
-impVariablesLog(estadisticas.modelos.bin[6]$`SBC-backward`, "varObjBin", data_train.bin)
-impVariablesLog(glm(paste0("varObjBin~",rownames(modelos.aleatorios)[1]), data_train.bin, 
-                    family = binomial), "varObjBin", data_train.bin)
+impVariablesLog(estadisticas.modelos.bin[2]$`SBC-both`, "varObjBin", data_train.bin)
+impVariablesLog(glm(primer.modelo.aleatorio, "varObjBin", data_train.bin)
 ```
 ```
-            Variables modelo 6 Importancia      Variables modelo 2 Importancia
-   AgricultureUnemploymentPtge 0.00137               PobChange_pct 0.00147
-                 PobChange_pct 0.00150 AgricultureUnemploymentPtge 0.00226
-                 prop_missings 0.00216              Age_over65_pct 0.00360
-                Age_over65_pct 0.00311                    Densidad 0.00537
-  ForeignersPtge:ActividadPpal 0.00314              ForeignersPtge 0.00865
- CCAA:IndustryUnemploymentPtge 0.00658                        CCAA 0.33007
+            VARIABLES MODELO 2 IMPORTANCIA      VARIABLES MODELO 1 IMPORTANCIA
+                    SUPERFICIE 0.00147               PobChange_pct 0.00147
+                 PobChange_pct 0.00152 AgricultureUnemploymentPtge 0.00226
+   AgricultureUnemploymentPtge 0.00228              Age_over65_pct 0.00360
+                Age_over65_pct 0.00299                    Densidad 0.00537
+                 prop_missings 0.00450              ForeignersPtge 0.00865
+                ForeignersPtge 0.00892                        CCAA 0.33007
+                          CCAA 0.32638
 ```
 ```{r, echo=FALSE}
 cat("Correlacion entre Age_over65_pct y PobChange_pct: ", cor(Filter(is.numeric, input_bin)[c(5,24)], use="complete.obs", method="pearson")[2,1], "\n")
 ```
 
 ```{r, echo=FALSE}
-cat("Modelo 6 clásico (modificado): \n")
+cat("Modelo 2 clásico (modificado): \n")
 mostrar.estadisticas(modelo.final.bin.clasica, data_train.bin, data_test.bin, "glm", "varObjBin")
 cat("Modelo 1 aleatorio (modificado): \n")
 mostrar.estadisticas(modelo.final.bin.aleatorio, data_train.bin, data_test.bin, "glm", "varObjBin")
 ```
 
-En ambos casos, pese a eliminar las variables con mayor correlación, __en términos AIC/SBC además de un mayor pseudoR2__ continúa dando una mayor ventaja al modelo 6 clásico. Por otro lado, si comparamos las nuevas medias y desviaciones típicas:
+En ambos casos, pese a eliminar las variables con mayor correlación, los criterios AIC y SBC continuan siendo muy similares entre si, con una diferencia muy pequeña. Sin embargo ¿Cómo han variado las desviaciones típicas y la media?
 
 ```{r, echo=FALSE}
 nuevas.medias.sd
 ```
 
-En ambos casos, continuan favoreciendo al modelo 6. No obstante, el modelo 1 parece tratarse de un modelo mucho más sencillo, pues si nos fijamos en la salida anterior de _impVariablesLog_, __no emplea ninguna interacción__. De hecho, mientras que el modelo 6 interactúa el porcentaje de extranjeros con la Actividad principal, así como la CCAA con el porcentaje de desempleo en la industria, el modelo 1 utiliza el campo Densidad así como el porcentaje de desempleados en el sector agrícola. En general, tanto el campo CCAA sin interactuar como el nivel de Densidad en el municipio __suponen una mayor importancia en comparación con las interacciones del modelo 1__. Si analizamos nuevamente los p-valores:
+Nuevamente, los valores son muy similares, aunque con una ligera ventaja en el modelo 1 aleatorio. Si además nos fijamos en la importancia de las variables mostrada anteriormente, el modelo 1 aleatorio __emplea una columna menos que en el modelo 6__. Por un lado, ambos modelos __parecen coincidir en la importancia de la Comunidad Autónoma, el porcentaje de extranjeros, la población mayor a 65 años, así como el desempleo en el sector agrario__, especialmente en la CCAA, con mayor peso en ambos casos. No obstante, mientras que el modelo 6 clásico emplea la superficie y la proporción de valores atípicos (prop_missings), el campo _Densidad_ empleado en el modelo 1 aleatorio __aporta la misma importancia (0.005)__. Si además nos fijamos en los p-valores de cada modelo:
 
 ```{r, echo=FALSE}
-cat("Modelo 6 clásico (modificado): \n")
+cat("Modelo 2 clásico (modificado): \n")
 summary(summary(modelo.final.bin.clasica)$coefficients[, 4])
 cat("Modelo 1 aleatorio (modificado): \n")
 summary(summary(modelo.final.bin.aleatorio)$coefficients[, 4])
 ```
 
-Gran parte de las variables en el modelo 1 (concretamente el 75 %) aportan mucha más importancia que las variables del modelo 6: 4.7e-06 en comparación con 0.03. Por tanto, pese a que el modelo 6 aporte un mejor pseudoR2 (0.41 frente a 0.40), además de un mejor criterio AIC-SBC, los resultados del _summary_ indican que la importancia de sus variables es menos significativa con respecto al modelo 1, un modelo que, pese a no utilizar ninguna interacción, obtiene unos valores pseudoR2 muy similares al modelo clásico (la diferencia entre ambos R2 es de apenas 0.01). Una posibilidad sería __comprobar si existen interacciones que mejoren las estadísticas del modelo 1__, concretamente las interacciones más importantes que pudimos extraer en el primer modelo:
-
-```
-                             Interaccion     AIC     SBC  Dif. PseudoR2   sd
-1 IndustryUnemploymentPtge:ActividadPpal 5119.72 5214.62  -0.00143     0.008905
-2                Age_over65_pct:Densidad 5130.51 5218.64  -0.00019     0.008991
-3                    CCAA:ForeignersPtge 5121.14 5229.6   -0.00085     0.009038
-4          CCAA:IndustryUnemploymentPtge 5083.37 5198.61   0.00715     0.008450
-5                 Densidad:prop_missings 5124.47 5219.38  -0.00203     0.008921
-6                      Sin interaccionar 5126.85 5201.41   0.00020     0.008979    
-```
-
-Incluso añadiendo algunas de las interacciones más relevantes, en la mayoría de los casos se obtiene un valor pseudoR2 en el conjunto _test_ ligeramente superior con respecto a los datos de entrenamiento (diferencia negativa). De hecho, aunque no tuviéramos en cuenta los valores R2, tanto el criterio AIC como la desviación típica no parecen reducirse significativamente al incluir una interacción, incluso en algunos casos puede llegar a aumentar con respecto a los valores originales. Por tanto, __las interacciones__, pese a la mayor importancia que presentaban en los primeros modelos, __no parecen aportar mejoría alguna__.
-
-Como conclusión final, nos encontramos ante dos posibles modelos cuyo poder predictivo es similar (0.41-0.40), por lo que siguiendo el principio de parsimonia _en igualdad de condiciones, la explicación más sencilla suele ser la más probable_. Dado que el modelo 1 aleatorio ofrece un menor número de variables, __lo declaramos como modelo ganador__.
-
-A continuación, analizamos los coeficientes del modelo ganador mediante la función _summary_:
-
-```{r, echo=FALSE, out.width="60%", out.height="60%",fig.align="center"}
-knitr::include_graphics("summary_glm.png")
-```
-
-Analizando los coeficientes, llama la atención las provincias de Madrid, Cantabria, Rioja, Ceuta, Melilla, Murcia y Galicia (MA_CA_RI_CE_ME_MU_GA), cuyo p-valor corresponde con el máximo de todo el modelo (0.537). Al tratarse de la categoría con menor número de variables (816), puede ocurrir que la categoría tenga una menor representación con respecto al resto de Comunidades.
+Desde el valor medio, el tercer cuartil hasta el p-valor máximo nos indican que __las variables del modelo 1 aleatorio son mucho más significativas que las del modelo 6__: mientras que el p-valor máximo encontrado en el modelo 6 es de 0.70, en el modelo 1 aleatorio es de 0.53. Por ello, siguiendo el principio de parsimonia, _en igualdad de condiciones, la explicación más sencilla suele ser la más probable_: el número de parámetros originales en el modelo 1 aleatorio es menor al modelo 2 clásico (uno menos), lo que se ha traducido en valores pseudoR2 muy similares (0.412 y 0.407), además de un valor medio en la curva ROC ligeramente superior en el modelo 1 aleatorio (0.879 frente a 0.877), una desviación típica menor (0.008 frente a 0.009), además de una importancia en las variables mayor, __por lo que declaramos al modelo 1 aleatorio como modelo ganador__.
 
 ```
 ESTADISTICAS DEL MODELO FINAL:
@@ -775,23 +793,53 @@ Train:  0.4078011 ; Test:  0.4075987 ; Dif. (Train-Test):  0.000202435 ; AIC: 51
 Numero de variables:  11 ; sd: 0.008979965
 ```
 
-## 3.4 Selección del punto de corte óptimo
+A continuación, se ha planteado la posibilidad de __añadir algunas de las interacciones más significativas planteadas inicialmente__, con el propósito de comprobar si el modelo mejora:
 
-Una vez elegido el modelo final, debemos __evaluar cual es el punto de corte que ofrece un mejor resultado__. Para ello, obtenemos tanto el punto de corte que maximice la tasa de aciertos como el índice de Youden, generando una rejilla con todos los posibles puntos de corte (de 0 a 1 en intervalos de 0.01):
-
-```{r}
-rejilla$posiblesCortes[which.max(rejilla$Accuracy)] # Maximiza tasa aciertos
-rejilla$posiblesCortes[which.max(rejilla$Youden)] # Maximiza indice Youden
+```
+                             Interaccion     AIC     SBC PseudoR2 train  PseudoR2 test  sd
+1 IndustryUnemploymentPtge:ActividadPpal 5119.72 5214.62 0.40932         0.41076        0.00890
+2                Age_over65_pct:Densidad 5130.51 5218.64 0.40784         0.40803        0.00899
+3                    CCAA:ForeignersPtge 5121.14 5229.6  0.40962         0.41048        0.00903
+4          CCAA:IndustryUnemploymentPtge 5083.37 5198.61 0.41423         0.40708        0.00845
+5                 Densidad:prop_missings 5124.47 5219.38 0.40877         0.41081        0.00892
+6                      Sin interacciones 5126.85 5201.41 0.40780         0.40759        0.00897
 ```
 
-Una vez obtenidos ambos puntos de corte, comparamos los porcentajes recuperados de la matriz de confusión:
+Incluso añadiendo algunas de las interacciones más relevantes, en la mayoría de los casos se obtiene un valor pseudoR2 en el conjunto _test_ ligeramente superior con respecto a los datos de entrenamiento (diferencia negativa). Incluso en aquellas interacciones donde la diferencia es positiva (CCAA:IndustryUnemploymentPtge), pese a que el pseudo-R2 aumente en el conjunto de entrenamiento (0.40 a 0.41), en el caso de los datos de prueba parece verse reducido ligeramente (de 0.4075 a 0.4070), por lo que aparentemente __las interacciones no aportan mejoría al modelo en proporción al número de parámetros__. 
+
+A continuación, analizamos los coeficientes del modelo ganador mediante la función _summary_:
+
+```{r, echo=FALSE, out.width="50%", out.height="50%",fig.align="center"}
+knitr::include_graphics("summary_glm.png")
+```
+
+Analizando los coeficientes, llama la atención las provincias de Madrid, Cantabria, Rioja, Ceuta, Melilla, Murcia y Galicia (MA_CA_RI_CE_ME_MU_GA), cuyo p-valor corresponde con el máximo de todo el modelo (0.537). Al tratarse de la categoría con menor número de variables (816), puede ocurrir que tenga una menor representación con respecto al resto de Comunidades. No obstante, __no se ha optado por agrupar__ la categoría con la región más cercana en cuanto a media (AR_CM), dado que los criterios de error AIC/SBC aumentan considerablemente, además de disminuir el valor pseudoR2 de 0.40 a a 0.39, un indicativo de que estamos perdiendo información relevante al agrupar ambas categorías.
+
+```
+# Sin agrupar MA_CA_RI_CE_ME_MU_GA
+Train:  0.4078011 ; Test:  0.4075987 ; AIC: 5126.85 ; SBC:   5201.418
+# Agrupando AR_CM con MA_CA_RI_CE_ME_MU_GA = AR_CM_MA_CA_RI_CE_ME_MU_GA
+Train:  0.3950895 ; Test:  0.3908024 ; AIC: 5234.426 ; SBC:  5302.216
+```
+
+## 3.4 Selección del punto de corte óptimo
+Una vez elegido el modelo final, debemos __evaluar cual es el punto de corte que ofrece un mejor resultado__. Para ello, obtenemos tanto el punto de corte que maximice la tasa de aciertos como el índice de Youden, generando una rejilla con todos los posibles puntos de corte (de 0 a 1 en intervalos de 0.01):
+
+```{r, echo=FALSE}
+cat("Indice que maximiza la tasa de aciertos: ",rejilla$posiblesCortes[which.max(rejilla$Accuracy)], "\n") # Maximiza tasa aciertos
+cat("Indice de Youden: ", rejilla$posiblesCortes[which.max(rejilla$Youden)], "\n") # Maximiza indice Youden
+```
+
+Una vez obtenidos ambos puntos de corte, comparamos los estadísticos obtenidos:
 
 ```{r}
 sensEspCorte(modelo.final.bin.aleatorio,data_test.bin,"varObjBin",0.54,"1") # Max. tasa aciertos
 sensEspCorte(modelo.final.bin.aleatorio,data_test.bin,"varObjBin",0.59,"1") # Indice Youden
 ```
 
-Analizando los porcentajes obtenidos, mediante el primer índice se consigue maximizar la sensitividad o tasa de verdaderos positivos, es decir, de cada 100 municipios en los que el modelo considera que hay un mayor número de votos a la derecha, 94 de ellos son verdaderos positivos. Por otro lado, no solo es capaz de maximizar la tasa de sensitividad, sino además el valor predictivo negativo: de cada 100 municipios en los que el modelo considera que no hay mayor número de votos a la derecha, ha predicho correctamente 87 de ellos (reduciendo el número de falsos negativos). Sin embargo, el objetivo del proyecto (tal y como se mencionó al comienzo de la memoria) no es solo conseguir que el modelo sea capaz de acertar en qué municipios resulta ganador la derecha, sino además __ser capaz de acertar también (en la medida de los posible) aquellos municipios en los que no__. A modo de ejemplo, el primer índice es capaz de acertar con alta precisión qué municipios votan a la derecha, mejorando tanto el porcentaje de verdaderos positivos (94 %) como además reducir el número de falsos negativos (VPN = 87 %). No obstante, la menor sensitividad que presenta (66 %) refleja que el modelo "pasa por alto" un elevado número de municipios que deberían considerarse 0 (no gana la derecha), pero que los está clasificando como municipios donde gana la derecha (1): __aumenta el número de falsos positivos__. Por el contrario, el índice de Youden, aunque con una sensitividad y un valor predictivo negativo menor, consigue reducir el número de falsos positivos, acertando en algo más del 70 % de los municipios en los que la derecha no resulta ganador. Por tanto, sacrificando la tasa de sensitividad y el aumento de falsos negativos, __escogemos el índice de Youden como punto de corte óptimo, pues permite no solo acertar en algo más del 90 % aquellos municpios en los que verdaderamente gana la derecha, sino además maximizar la tasa de verdaderos positivos, con cerca del 70 %__.
+Analizando los porcentajes obtenidos, mediante el primer índice se consigue maximizar la sensitividad o tasa de verdaderos positivos, es decir, de cada 100 municipios en los que el modelo considera que hay un mayor número de votos a la derecha, 94 de ellos son verdaderos positivos. Por otro lado, no solo es capaz de maximizar la tasa de sensitividad, sino además el valor predictivo negativo: de cada 100 municipios en los que el modelo considera que no hay mayor número de votos a la derecha, ha predicho correctamente 87 de ellos (reduciendo el número de falsos negativos). Sin embargo, el objetivo del proyecto (tal y como se mencionó al comienzo de la memoria) no es solo conseguir que el modelo sea capaz de acertar en qué municipios resulta ganador la derecha, sino además __ser capaz de acertar también (en la medida de lo posible) aquellos municipios en los que no__. 
+
+A modo de ejemplo, el primer índice es capaz de acertar con alta precisión qué municipios votan a la derecha, mejorando tanto el porcentaje de verdaderos positivos (94 %) como además reducir el número de falsos negativos (VPN = 87 %). No obstante, la menor sensitividad que presenta (66 %) refleja que el modelo "pasa por alto" un elevado número de municipios que deberían considerarse 0 (no gana la derecha), pero que los está clasificando como municipios ganadores (1): __aumenta el número de falsos positivos__. Por el contrario, el índice de Youden, aunque con una sensitividad y un valor predictivo negativo menor, consigue reducir el número de falsos positivos, acertando en algo más del 70 % de los municipios. Por tanto, sacrificando la tasa de sensitividad y el aumento de falsos negativos, __escogemos el índice de Youden como punto de corte óptimo, ya que maximiza la tasa de verdaderos positivos al 70 %__.
 
 Tras elegir el punto de corte óptimo, observamos que las medidas de clasificación son muy similares en ambos conjuntos de datos (entrenamiento y prueba), con porcentajes ligeramente superiores en el entrenamiento.
 
@@ -807,9 +855,8 @@ cat("Train AUC: ",roc(data_train.bin$varObjBin, predict(modelo.final.bin.aleator
 ```
 
 ## 3.5 Interpretación de los coeficientes de dos variables
-
 Por último, interpretamos los coeficientes de dos variables incluidas en el modelo:
 
-1. __DensidadAlta__: 1.022. Es decir, __el ODD de que en un municipio, cuya densidad de población es alta (> 5 hab./ha), resulte ganador la derecha es $e^{1.022} = 2.78$ veces mayor que el ODD de un municipio cuya densidad sea Muy Baja (< 1 hab./ha)__.
+1. __DensidadAlta__: 1.022. Es decir, __el ODD de que en un municipio, cuya densidad de población es alta (> 5 hab./ha), resulte ganador la derecha es $e^{1.022} = 2.78$ veces mayor que el ODD de un municipio cuya densidad es Muy Baja (< 1 hab./ha)__, esto es, la categoría de referencia. Por tanto, y dado que el coeficiente de _DensidadBaja_ es de 0.54, podemos decir que __conforme aumenta la densidad en el municipio, el ODD de que resulte ganador la derecha también aumenta__.
 
-2. __AgricultureUnemploymentPtge__: -0.016. Es decir, __por cada unidad en la que se decrementa el porcentaje de desempleados en el sector agrario, la ODD de que el municipio resulte ganador la derecha aumenta en un $e^{-0.016} = 0.98$ %. Es decir, __el ODD de que en el municipio gane la derecha aumenta cuanto menos desempleados en el sector agrario haya__.
+2. __AgricultureUnemploymentPtge__: -0.016. Es decir, __por cada unidad en la que se decrementa el porcentaje de desempleados en el sector agrario, la ODD de que en el municipio resulte ganador la derecha aumenta en un $e^{-0.016} = 0.98$ %__. Por tanto, __cuanto mayor sea el porcentaje de desempleo en el sector agrario, el ODD de que resulte ganador la derecha disminye__, a diferencia del modelo lineal donde el porcentaje de votos se ve influenciado por el número de desempleados en la Industria, Construcción o Servicios. 
