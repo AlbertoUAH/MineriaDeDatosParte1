@@ -15,7 +15,7 @@ mostrar.estadisticas <- function(modelo, data_train, data_test, tipo = "lm", var
 }
 
 # ---------------------------- FASE 2: REGRESION LINEAL ------------------------------
-input_cont<-readRDS("datosElectorales_Cont")
+input_cont<-readRDS("datosElectorales_Cont_2")
 
 formInt<-formulaInteracciones(input_cont,1)
 
@@ -102,13 +102,13 @@ validacion.cruzada <- function(modelos, metodo, data_train) {
     total<-rbind(total,cbind(vcr$resample[,1:2],modelo=rep(paste("Modelo",i),
                                                            nrow(vcr$resample))))
   }
-  bx <- boxplot(Rsquared~modelo,data=total,main="R-Square")
+  bx <- boxplot(Rsquared~modelo,data=total,main="R-Square",names = c("Modelo 6 clas.", "Modelo 1 ale.", "Modelo 2 ale.", "Modelo 3 ale."))
   print(bx$stats)
   data.frame(setNames(aggregate(Rsquared~modelo, data = total, mean), c("modelo", "media")), sd = aggregate(Rsquared~modelo, data = total, sd)[, 2])
 }
 
 # De cara a la comparacion final, nos quedamos con el sexto modelo
-estadisticas.modelos.final <- validacion.cruzada(c(estadisticas.modelos), "lm", data_train)
+estadisticas.modelos.final <- validacion.cruzada(c(estadisticas.modelos)[-3], "lm", data_train)
 estadisticas.modelos.final
 
 # ¿Que diferencia al modelo 6 del modelo 1?

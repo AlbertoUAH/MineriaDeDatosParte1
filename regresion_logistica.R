@@ -68,11 +68,10 @@ validacion.cruzada.bin <- function(modelos, metodo, data_train) {
     total<-rbind(total,data.frame(roc=vcr$resample[,1],modelo=rep(paste("Modelo",i),
                                                                   nrow(vcr$resample))))
   }
-  bx <- boxplot(roc~modelo,data=total,main="Area bajo la curva ROC")
-  print(bx$stats)
+  bx <- boxplot(roc~modelo,data=total,main="Area bajo la curva ROC", names=c("Modelo 2 clas.", "Modelo 1 ale.", "Modelo 2 ale.", "Modelo 3 ale."))
   data.frame(setNames(aggregate(roc~modelo, data = total, mean), c("modelo", "media")), sd = aggregate(roc~modelo, data = total, sd)[, 2])
 }
-estadisticas.modelos.final.bin <- validacion.cruzada.bin(c(estadisticas.modelos.bin), "glm", data_train.bin)
+estadisticas.modelos.final.bin <- validacion.cruzada.bin(c(estadisticas.modelos.bin)[-4], "glm", data_train.bin)
 # De cara a la seleccion aleatoria nos quedaremos tanto con el segundo como con el sexto modelo, ya que pese a que el sexto modelo mejora en cuanto a AIC, SBC y desviacion tipica,
 # la diferencia entre ambos es muy pequena, ademas de que el segundo modelo presenta un menor numero de parametros (40 frente a 19)
 estadisticas.modelos.final.bin
@@ -113,7 +112,7 @@ modelo.final.bin.clasica <- glm(formula.final.bin.clasica, data_train.bin, famil
 mostrar.estadisticas(modelo.final.bin.clasica, data_train.bin, data_test.bin, "glm", "varObjBin")
 
 cor(Filter(is.numeric, input_bin)[c(5,7,13,24)], use="complete.obs", method="pearson")
-impVariablesLog(glm(paste0("varObjBin~",rownames(modelos.aleatorios)[1]), data_train.bin, family = binomial), "varObjBin", data_train.bin)
+impVariablesLog(glm(paste0("varObjBin~",rownames(modelos.aleatorios)[3]), data_train.bin, family = binomial), "varObjBin", data_train.bin)
 formula.final.bin.aleatorio <- 'varObjBin ~ Age_over65_pct+AgricultureUnemploymentPtge+CCAA+Densidad+ForeignersPtge'
 modelo.final.bin.aleatorio <- glm(formula.final.bin.aleatorio, data_train.bin, family = binomial)
 mostrar.estadisticas(modelo.final.bin.aleatorio, data_train.bin, data_test.bin, "glm", "varObjBin")

@@ -152,8 +152,8 @@ correlaciones  <- round(abs(cor(Filter(is.numeric, input_cont), use="pairwise", 
 summary(correlaciones)
 
 # Filtramos unicamente las transformadas que mejoren en mas de 0.1
-input_cont <- input_cont[, !colnames(input_cont) %in% names(correlaciones[correlaciones < 0.1])]
-input_cont <- input_cont[, c(-3,-4,-9,-12,-14,-15,-17,-19,-25)]
+#input_cont <- input_cont[, !colnames(input_cont) %in% names(correlaciones[correlaciones < 0.1])]
+#input_cont <- input_cont[, c(-3,-4,-9,-12,-14,-15,-17,-19,-25)]
 # Todas las transformadas significativas emplean escalas logaritmicas
 names(correlaciones[correlaciones >= 0.1])
 
@@ -166,8 +166,8 @@ summary(sapply(salida.woe[c(31:57)], function(x) x$total_iv[1]) -
 input_bin <- input_bin[, -c(32:58)]
 
 # Finalmente, almacenamos el resultado en disco
-saveRDS(input_cont,"datosElectorales_Cont")
-saveRDS(input_bin,"datosElectorales_Bin")
+saveRDS(input_cont,"datosElectorales_Cont_2")
+saveRDS(input_bin,"datosElectorales_Bin_2")
 
 # Finalmente, guardamos el workspace
 save.image(file = "depuracion.RData")

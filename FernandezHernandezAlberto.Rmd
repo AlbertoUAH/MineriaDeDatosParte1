@@ -108,7 +108,7 @@ summary(datos$ForeignersPtge)
 ```
 
 ```{r}
-datos$ForeignersPtge<-replace(datos$ForeignersPtge, which(datos$ForeignersPtge < 0), NA)  # Min < 0
+datos$ForeignersPtge<-replace(datos$ForeignersPtge, which(datos$ForeignersPtge < 0), NA)  # 653 rows recoded
 ```
 
 2. Porcentajes de _SameComAutonPtge_ y _PobChange_pct_ superiores al 100 % (en el caso de _PobChange_pct_ según la documentación son posibles los porcentajes negativos, aunque no menciona los porcentajes mayores a 100):
@@ -118,7 +118,7 @@ summary(datos$SameComAutonPtge)
 ```
 
 ```{r}
-datos$SameComAutonPtge <-replace(datos$SameComAutonPtge, which(datos$SameComAutonPtge > 100), NA)
+datos$SameComAutonPtge <-replace(datos$SameComAutonPtge, which(datos$SameComAutonPtge > 100), NA) # 3 rows recoded
 ```
 
 ```{r, echo=FALSE}
@@ -126,7 +126,7 @@ summary(datos$PobChange_pct)
 ```
 
 ```{r}
-datos$PobChange_pct <-replace(datos$PobChange_pct, which(datos$PobChange_pct > 100), NA) # Max > 100
+datos$PobChange_pct <-replace(datos$PobChange_pct, which(datos$PobChange_pct > 100), NA) # 2 rows recoded
 ```
 
 3. Valores a 99.999 en la columna _Explotaciones_, posible indicativo de la ausencia de valores en estos casos:
@@ -136,7 +136,7 @@ summary(datos$Explotaciones)
 ```
 
 ```{r}
-datos$Explotaciones<-replace(datos$Explotaciones,which(datos$Explotaciones==99999),NA) # Max == 99999
+datos$Explotaciones<-replace(datos$Explotaciones,which(datos$Explotaciones==99999),NA) # 189 rows recoded
 ```
 
 4. Categoría "?" sin declarar en _Densidad_, por lo que lo recategorizamos a _NA_:
@@ -192,7 +192,13 @@ Aparentemente, mientras que el porcentaje de _missings_ por variable es del 12.6
 summary(datos$prop_missings)
 ```
 
-Vemos que el 75 % de las observaciones contienen aproximadamente un 3 % de valores _missings_ o menos, por lo que no parece tratarse de varias filas (de hecho, solo el 25 % presenta un porcentaje de _missings_ superior al 3 %, con una media muy pequeña en comparación con el valor máximo, lo que indica que se tratan de observaciones atípicas). Por otro lado, la pérdida de información en ambos casos no supera el 50 %, por lo que en lugar de eliminar las filas o columnas podemos imputarlos. No obstante, existen determinados campos que pueden ser imputados manualmente sin necesidad de emplear una media, mediana o de forma aleatoria: 
+Vemos que el 75 % de las observaciones contienen aproximadamente un 3 % de valores _missings_ o menos, por lo que no parece tratarse de varias filas (de hecho, solo 868 filas presentan un porcentaje de _missings_ superior al 10 %):
+
+```{r, echo=FALSE}
+cat("length(which(datos$prop_missings > 10)): ",  length(which(datos$prop_missings > 10)), " ~ 10 %")
+```
+
+Por otro lado, la pérdida de información en ambos casos no supera el 50 %, por lo que en lugar de eliminar las filas o columnas podemos imputarlos. No obstante, existen determinados campos que pueden ser imputados manualmente sin necesidad de emplear una media, mediana o de forma aleatoria:
 
 1. _Age_19_65_pct_, cuyo porcentaje de edad puede calcularse a partir de la suma de _Age_under19_Ptge_ y _Age_over65_pct_ menos el 100 %:
 
@@ -374,7 +380,7 @@ Una vez recategorizadas las variables, ¿Cómo están relacionadas las variables
 corrplot(cor(Filter(is.numeric, datos[c(4,5,6,7,9,10,12,2,3,20:27)]), use="pairwise", method="pearson"), method = "circle",type = "upper", tl.cex = 0.5)
 ```
 
-Analizando el gráfico, debemos destacar tres grandes grupos de correlación. En primer lugar, __las edades__, donde cada porcentaje puede llegar a obtenerse (como pudimos observar con _Age_19_65_pct_) a partir del resto de edades, es decir, __son complementarios__. Por otro lado, __el porcentaje de personas que residen en la misma o diferente CCAA__ (también complementarios), e incluso entre dichos porcentajes y el porcentaje de extranjeros. Como último bloque nos encontramos no solo con _totalEmpresas_ y el resto de sectores, sino además con _Population_, _TotalCensus_, _inmuebles_ y _Pob2010_, campos en los que pudimos detectar una elevada correlación entre valores _missing_. Por tanto, ¿Debemos eliminar algún campo? La respuesta es si, pero con cierto cuidado ya que solo podemos eliminar uno de cada grupo complementario (si eliminamos más de uno no podríamos volver a calcularlo). Para analizar qué campos podemos o no eliminar, realicemos la V de Cramer para ambas variables objetivo:
+Analizando el gráfico, debemos destacar tres grandes grupos de correlación. En primer lugar, __las edades__, donde cada porcentaje puede llegar a obtenerse (como pudimos observar con _Age_19_65_pct_) a partir del resto de edades, es decir, __son complementarios__. Por otro lado, __el porcentaje de personas que residen en la misma o diferente CCAA__ (también complementarios), e incluso entre dichos porcentajes y el porcentaje de extranjeros. Como último bloque nos encontramos no solo con _totalEmpresas_ y el resto de sectores, sino además con _Population_, _TotalCensus_, _inmuebles_ y _Pob2010_, campos en los que pudimos detectar una elevada correlación entre valores _missing_. Por tanto, de cara a facilitar el cálculo del modelo se han decidido eliminar una única variable de cada grupo de correlación, concretamente aquella de menor importancia con respecto a las variables objetivo (dado que en un modelo no pueden aparecer dos variables con alta colinealidad). Para ello, realizamos la V de Cramer para ambas variables objetivo:
 
 ```{r, echo=FALSE, fig.height=4, fig.width=8}
 par(mfrow = c(1,2))
@@ -383,7 +389,7 @@ graficoVcramer(datos[,c(4,5,6,7,9,10,12,2,3,20:24,26:27)],varObjBin)
 ```
 
 En ambos casos, de los campos de edad podemos eliminar _Age_19_65_pct_ con menor significancia; del porcentaje de residencia en la misma o diferente CCAA podemos descartar _DifComAutonPtge_, lo que permitiría reducir el coste computacional para ambos modelos (a modo de variables _dummy_).
-¿Qué podemos hacer con el bloque de _totalEmpresas_? Aunque debería eliminarse el menor número de variables posible, de cara a la regresión lineal y logística partiremos de un modelo general incluyendo todas las variables e interacciones, por lo que si mantenemos todos los campos, el proceso de obtención será computacionalmente más costoso, por lo que se ha tomado la decisión de eliminar (del bloque _totalEmpresas_) la variable con el menor valor VCramer: _inmuebles_ en el caso de la variable objetivo continua y _Construcción_ en el caso de la variable objetivo binaria. El resto de campos los mantenemos.
+¿Qué podemos hacer con el bloque de _totalEmpresas_? Aunque debería eliminarse el menor número de variables posible, de cara a la regresión lineal y logística partiremos de un modelo general incluyendo todas las variables e interacciones, por lo que si mantenemos todos los campos, el proceso de obtención será computacionalmente más costoso, por lo que se ha tomado la decisión de eliminar (del bloque de correlación _totalEmpresas_) la variable con el menor valor VCramer: _inmuebles_ en el caso de la variable objetivo continua y _Construcción_ en el caso de la variable objetivo binaria. El resto de campos los mantenemos.
 
 __Como primer análisis, el estudio realizado hasta el momento por el conjunto de datos, así como los V Cramer obtenidos, lleva a la conclusión de que tanto la CCAA como los porcentajes de edad (especialmente mayores de 65 y menores de 19 años), así como el número de empresas en el municipio parecen ser las variables más decisivas en relación al número de votos a la derecha.__
 
@@ -513,7 +519,7 @@ data.frame("R^2.train" = sapply(estadisticas.modelos, function(x) Rsq(x, "varObj
 
 Analizando la tabla resultante, dado su menor número de parámetros quisiera destacar tanto el modelo 2 como el modelo 6, ya que el resto no ha disminuido lo suficiente en cuanto al número de variables se refiere. En contraste, la diferencia entre el R2 train-test y su menor número de variables da una ligera ventaja al modelo 2, aunque el modelo 6 no solo mejora en cuanto a AIC se refiere, sino incluso que el criterio SBC (que penaliza el número de parámetros), da una mayor ventaja al modelo 6 (49098 frente a 49140). Para confirmar el mejor modelo clásico, realizamos una validación cruzada __con un total de 20 repeticiones, empleando 5 grupos__:
 
-```{r, echo=FALSE, out.width="90%", out.height="90%",fig.align="center",fig.cap="Validación cruzada en los modelos de selección clásicos"}
+```{r, echo=FALSE, out.width="90%", out.height="90%",fig.align="center",fig.cap="Validación cruzada en los modelos de selección clásicos (el modelo 1 y 3 son el mismo)"}
 knitr::include_graphics("validacion_cruzada.png")
 ```
 
@@ -621,9 +627,11 @@ Como conclusión final, a lo largo del proceso de modelado de la regresión line
 ## 2.4 Interpretación de los coeficientes de dos variables
 Finalmente, interpretamos los coeficientes de dos variables obtenidas en el modelo.
 
-1. __CCAACAT_PV__ (Cataluña y País Vasco): 19.10. Es decir, __el porcentaje de votos a la derecha aumenta en un 19.10 % aproximadamente si la CCAA a la que pertenece el municipio es Cataluña o País Vasco con respecto a la Comunidad Autónoma de referencia__ (Castilla y León).
+1. __CCAACAT_PV__ (Cataluña y País Vasco): 19.10. Es decir, __el porcentaje de votos a la derecha es un 19.10 % mayor aproximadamente si la CCAA a la que pertenece el municipio es Cataluña o País Vasco con respecto a la Comunidad Autónoma de referencia__ (Castilla y León). [^2]
 
 2. __logxConstructionUnemploymentPtge__: -0.24. Es decir, __por cada incremento unitario en el porcentaje de desempleados en el sector de la construcción, el porcentaje de votos a la derecha se ve reducido en un 0.24 %__. Por tanto, aquellos municipios con mayor porcentaje de paro en la construcción __afectan negativamente al voto de la derecha__.
+
+[^2]: El porcentaje de votos a la derecha será mayor en todas las CCAA ya que la dispersión de votos es menor que en Castilla y León (como vimos en el boxplot)
 
 # 3. Construcción del modelo de regresión logística
 ```{r, echo=FALSE}
@@ -692,7 +700,7 @@ Por lo general, en cualquier modelo de aprendizaje automático el conjunto de da
 
 Por tanto, los criterios AIC/SBC no resultan suficientes para decidir cual es el mejor modelo clásico, por lo que realizamos una __validación cruzada del mismo modo que en la regresión lineal__. De este modo podremos comprobar si los resultados son independientes en función de la partición de los datos: __si la desviación típica en los valores ROC es baja, significaría que la partición empleada en la selección clásica no sería la más adecuada. En caso contrario, podría tratarse de un posible sobreajuste en el modelo 2__:
 
-```{r, echo=FALSE, out.width="90%", out.height="90%",fig.align="center",fig.cap="Validación cruzada en los modelos de selección clásicos"}
+```{r, echo=FALSE, out.width="90%", out.height="90%",fig.align="center",fig.cap="Validación cruzada en los modelos de selección clásicos (modelos 2 y 4 son el mismo)"}
 knitr::include_graphics("validacion_cruzada_logistica.png")
 ```
 
@@ -800,9 +808,7 @@ A continuación, se ha planteado la posibilidad de __añadir algunas de las inte
 6                      Sin interacciones 5126.85 5201.41 0.40780         0.40759        0.00897
 ```
 
-Incluso añadiendo algunas de las interacciones más relevantes, en la mayoría de los casos se obtiene un valor pseudoR2 en el conjunto _test_ ligeramente superior con respecto a los datos de entrenamiento (diferencia negativa). Incluso en aquellas interacciones donde la diferencia es positiva (CCAA:IndustryUnemploymentPtge), pese a que el pseudo-R2 aumente en el conjunto de entrenamiento (0.40 a 0.41), en el caso de los datos de prueba parece verse reducido ligeramente (de 0.4075 a 0.4070), por lo que aparentemente __las interacciones no aportan mejoría al modelo de regresión logística__. 
-
-A continuación, analizamos los coeficientes del modelo ganador mediante la función _summary_:
+Incluso añadiendo algunas de las interacciones más relevantes, en la mayoría de los casos se obtiene un valor pseudoR2 en el conjunto _test_ ligeramente superior con respecto a los datos de entrenamiento (diferencia negativa). Incluso en aquellas interacciones donde la diferencia es positiva (CCAA:IndustryUnemploymentPtge), pese a que el pseudo-R2 aumente en el conjunto de entrenamiento (0.40 a 0.41), en el caso de los datos de prueba parece verse reducido ligeramente (de 0.4075 a 0.4070), por lo que aparentemente __las interacciones no aportan mejoría al modelo de regresión logística__. Por otro lado, pese a que el modelo 2 aleatorio no emplee los campos _Age_over65_pct_ o _Densidad_, mantendremos dichos campos (pues el p-valor obtenido demuestra su significancia). A continuación, analizamos los coeficientes del modelo ganador mediante la función _summary_:
 
 ```{r, echo=FALSE, out.width="50%", out.height="50%",fig.align="center"}
 knitr::include_graphics("summary_glm.png")
